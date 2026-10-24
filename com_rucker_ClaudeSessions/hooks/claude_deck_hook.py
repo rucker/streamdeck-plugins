@@ -136,13 +136,17 @@ def main() -> None:
         record["since"] = now
     if state != PERMISSION:
         record.pop("request", None)
+        record.pop("request_kind", None)
     elif payload.get("hook_event_name") == "PermissionRequest":
         record["request"] = summarize_request(
             str(payload.get("tool_name", "")), payload.get("tool_input")
         )[:120]
+        # Only tool approvals may be approved from the deck.
+        record["request_kind"] = "tool"
     elif "request" not in record:
         # Notification-only fallback (e.g. a question rather than a tool call).
         record["request"] = str(payload.get("message", ""))[:120]
+        record["request_kind"] = "other"
 
     write_atomic(path, record)
 

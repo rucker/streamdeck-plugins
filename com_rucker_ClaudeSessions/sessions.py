@@ -8,6 +8,7 @@ and shared through the plugin's single SessionStore instance.
 
 import json
 import os
+import re
 import subprocess
 import threading
 import time
@@ -33,6 +34,9 @@ PRUNE_INTERVAL_SECONDS = 10
 UNTRACKED_MAX_AGE_SECONDS = 12 * 3600
 
 SHELLS = {"bash", "zsh", "fish", "sh", "dash"}
+
+# Claude Code's tool permission dialog: highlighted "1. Yes" plus the footer.
+APPROVE_DIALOG = re.compile(r"^\s*❯\s*1\.\s*Yes\s*$(?=.*Esc to cancel)", re.MULTILINE | re.DOTALL)
 
 
 def is_in_flatpak() -> bool:
@@ -214,6 +218,43 @@ class SessionStore:
             self._activate_terminal()
         except Exception as e:  # noqa: BLE001
             log.warning(f"[ClaudeSessions] could not raise terminal (is Window Calls enabled?): {e}")
+
+    # ------------------------------------------------------------------ #
+    # Approving a permission prompt
+    # ------------------------------------------------------------------ #
+
+    @staticmethod
+    def can_approve(session: dict) -> bool:
+        return (
+            session.get("state") == PERMISSION
+            and session.get("request_kind") == "tool"
+            and bool(session.get("tmux_pane"))
+        )
+
+    def approve(self, session: dict, on_done=None):
+        """Answers "1. Yes" (never "don't ask again"); on_done(ok) runs on the GTK thread."""
+        def work():
+            ok = False
+            try:
+                ok = self._approve(session)
+            except Exception as e:  # noqa: BLE001
+                log.warning(f"[ClaudeSessions] approve failed: {e}")
+            if on_done:
+                GLib.idle_add(on_done, ok)
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _approve(self, session: dict) -> bool:
+        if not self.can_approve(session):
+            return False
+        pane = session["tmux_pane"]
+        # Check the dialog is really on screen: it may have been answered in the
+        # terminal already, and a stray "1" would land in the prompt instead.
+        screen = run_host(["tmux", "capture-pane", "-p", "-t", pane])
+        if screen.returncode != 0 or not APPROVE_DIALOG.search(screen.stdout):
+            log.info(f"[ClaudeSessions] no approval dialog visible in {pane}; not sending")
+            return False
+        return run_host(["tmux", "send-keys", "-t", pane, "1"]).returncode == 0
 
     # ------------------------------------------------------------------ #
     # Window Calls GNOME extension (window-calls@domandoman.xyz)

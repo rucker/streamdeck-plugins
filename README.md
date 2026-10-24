@@ -15,11 +15,13 @@ Shows every running Claude Code session on the deck and jumps to it on press.
 
 **Actions**
 
-- **Session Slot** (key or dial): the Nth session, numbered by start order. Press to jump.
+- **Session Slot** (key or dial): the Nth session, numbered by start order. Press to jump; **long-press to approve** a pending tool permission.
 - **Next Waiting Session** (key or dial): how many sessions need you. Press to jump to the one that has waited longest; permission prompts come first.
-- **Session Picker** (dial): turn to pick a session, press or tap the strip to jump.
+- **Session Picker** (dial): turn to pick a session, press or tap the strip to jump; long-press to approve.
 
 A session you're already looking at (its tmux pane is active and the terminal has focus) doesn't count as waiting and doesn't pulse. On a dial, a red session's strip segment shows what Claude is asking for, e.g. `$ npm test` or `Edit main.py`.
+
+**Approving from the deck** answers "1. Yes" (never "don't ask again"), and only when the request came from a `PermissionRequest` hook (not a question) and the dialog is verifiably on screen (`tmux capture-pane`). Otherwise the key shows an error and nothing is sent.
 
 **How it works**
 

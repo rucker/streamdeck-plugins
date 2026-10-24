@@ -37,10 +37,17 @@ STATE_TEXT = {
 
 OUTLINE = {"outline_width": 2, "outline_color": [0, 0, 0, 200]}
 
+# Short press jumps; a long press (hold-time, 0.5s by default) approves. Jumping
+# fires on a short release so that a long press doesn't also jump.
 PRESS_EVENTS = (
-    Input.Key.Events.DOWN,
-    Input.Dial.Events.DOWN,
+    Input.Key.Events.SHORT_UP,
+    Input.Dial.Events.SHORT_UP,
     Input.Dial.Events.SHORT_TOUCH_PRESS,
+)
+APPROVE_EVENTS = (
+    Input.Key.Events.HOLD_START,
+    Input.Dial.Events.HOLD_START,
+    Input.Dial.Events.LONG_TOUCH_PRESS,
 )
 
 
@@ -83,6 +90,19 @@ class ClaudeAction(ActionBase):
 
     def refresh(self):
         raise NotImplementedError
+
+    def approve(self, session: dict | None):
+        if session is None or not self.store.can_approve(session):
+            self.show_error(duration=1)
+            return
+
+        def done(ok):
+            if not ok:
+                self.show_error(duration=1)
+            self.store.invalidate()
+            return False
+
+        self.store.approve(session, on_done=done)
 
     def show(self, top: str, center: str, bottom: str, color: list[int], center_size: int = 14):
         frame = (top, center, bottom, tuple(color), center_size)
@@ -131,8 +151,11 @@ class SessionSlot(ClaudeAction):
         self.show_session(self.session())
 
     def event_callback(self, event, data=None):
-        if event in PRESS_EVENTS and (session := self.session()):
+        session = self.session()
+        if event in PRESS_EVENTS and session:
             self.store.jump_to(session)
+        elif event in APPROVE_EVENTS:
+            self.approve(session)
 
     def get_config_rows(self) -> list:
         row = Adw.SpinRow.new_with_range(1, 32, 1)
@@ -206,3 +229,5 @@ class SessionDial(ClaudeAction):
             self.refresh()
         elif event in PRESS_EVENTS:
             self.store.jump_to(sessions[index])
+        elif event in APPROVE_EVENTS:
+            self.approve(sessions[index])
