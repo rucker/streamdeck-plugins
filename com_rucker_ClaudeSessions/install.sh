@@ -21,7 +21,8 @@ python3 -I - "$settings" "$hook" <<'EOF'
 import json, os, sys
 
 settings_path, hook = sys.argv[1], sys.argv[2]
-events = ["SessionStart", "UserPromptSubmit", "PostToolUse", "Notification", "Stop", "SessionEnd"]
+events = ["SessionStart", "UserPromptSubmit", "PermissionRequest", "PostToolUse",
+          "PostToolUseFailure", "Notification", "Stop", "SessionEnd"]
 command = f"python3 -I {hook}"
 
 try:

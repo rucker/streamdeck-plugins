@@ -15,6 +15,7 @@ import os
 import sys
 import tempfile
 import time
+from urllib.parse import urlparse
 
 # Deliberately not $XDG_CACHE_HOME: inside the StreamController Flatpak that
 # points into the sandbox, and both sides must agree on this path.
@@ -31,10 +32,12 @@ def state_for(payload: dict) -> str | None:
 
     if event == "SessionStart":
         return IDLE
-    if event in ("UserPromptSubmit", "PostToolUse"):
+    if event in ("UserPromptSubmit", "PostToolUse", "PostToolUseFailure"):
         return WORKING
     if event == "Stop":
         return DONE
+    if event == "PermissionRequest":
+        return PERMISSION
     if event == "Notification":
         kind = payload.get("notification_type")
         message = str(payload.get("message", "")).lower()
@@ -45,6 +48,26 @@ def state_for(payload: dict) -> str | None:
         if kind == "idle_prompt" or (kind is None and "waiting for your input" in message):
             return DONE
     return None
+
+
+def summarize_request(tool: str, tool_input: dict) -> str:
+    """One short line describing what Claude wants to do, for the deck."""
+    tool_input = tool_input if isinstance(tool_input, dict) else {}
+    if tool == "Bash":
+        command = str(tool_input.get("command", "")).strip().splitlines()
+        return "$ " + (command[0] if command else "")
+    if "file_path" in tool_input or "notebook_path" in tool_input:
+        path = tool_input.get("file_path") or tool_input.get("notebook_path")
+        return f"{tool} {os.path.basename(str(path))}"
+    if tool == "WebFetch":
+        return "Fetch " + urlparse(str(tool_input.get("url", ""))).netloc
+    if tool == "WebSearch":
+        return "Search: " + str(tool_input.get("query", ""))
+    if tool.startswith("mcp__"):
+        # mcp__<server>__<tool>
+        _, server, name = (tool.split("__", 2) + ["", ""])[:3]
+        return f"{server}: {name}"
+    return tool
 
 
 def project_name(cwd: str) -> str:
@@ -111,8 +134,15 @@ def main() -> None:
     if record.get("state") != state:
         record["state"] = state
         record["since"] = now
-    if state == PERMISSION:
-        record["message"] = payload.get("message", "")
+    if state != PERMISSION:
+        record.pop("request", None)
+    elif payload.get("hook_event_name") == "PermissionRequest":
+        record["request"] = summarize_request(
+            str(payload.get("tool_name", "")), payload.get("tool_input")
+        )[:120]
+    elif "request" not in record:
+        # Notification-only fallback (e.g. a question rather than a tool call).
+        record["request"] = str(payload.get("message", ""))[:120]
 
     write_atomic(path, record)
 

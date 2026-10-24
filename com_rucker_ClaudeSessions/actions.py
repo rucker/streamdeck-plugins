@@ -7,6 +7,7 @@ Claude Sessions actions:
 - SessionDial:  Stream Deck+ dial; turn to pick a session, press/tap to jump.
 """
 
+import textwrap
 import time
 
 import gi
@@ -55,6 +56,13 @@ def truncate(text: str, length: int) -> str:
     return text if len(text) <= length else text[: length - 1] + "…"
 
 
+def wrap(text: str, width: int, lines: int) -> str:
+    wrapped = textwrap.wrap(text, width=width, break_long_words=True) or [""]
+    if len(wrapped) > lines:
+        wrapped = wrapped[: lines - 1] + [truncate(" ".join(wrapped[lines - 1 :]), width)]
+    return "\n".join(wrapped)
+
+
 class ClaudeAction(ActionBase):
     """Shared rendering: only pushes to the deck when what's shown changes."""
 
@@ -92,12 +100,17 @@ class ClaudeAction(ActionBase):
             self.show(top_prefix, "", "", EMPTY)
             return
         state = session.get("state", IDLE)
+        center, center_size = STATE_TEXT.get(state, state), 14
+        # A dial's strip segment is wide enough to show what's being asked.
+        if state == PERMISSION and session.get("request") and isinstance(self.input_ident, Input.Dial):
+            center, center_size = wrap(session["request"], width=22, lines=2), 11
         self.show(
             top=top_prefix + truncate(session.get("project", "?"), 10),
-            center=STATE_TEXT.get(state, state),
+            center=center,
             bottom=humanize_age(time.time() - session.get("since", time.time())),
             # No pulsing for the session you're already looking at.
             color=state_color(state, blink=not self.store.is_watched(session)),
+            center_size=center_size,
         )
 
 
