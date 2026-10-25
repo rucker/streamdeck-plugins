@@ -9,6 +9,7 @@ Claude Sessions actions:
 
 import textwrap
 import time
+from typing import NamedTuple
 
 import gi
 
@@ -18,6 +19,7 @@ from gi.repository import Adw
 from src.backend.DeckManagement.InputIdentifier import Input
 from src.backend.PluginManager.ActionBase import ActionBase
 
+from .logo import CLAUDE_CREAM, logo
 from .sessions import DONE, IDLE, PERMISSION, UNKNOWN, WORKING, humanize_age
 
 COLORS = {
@@ -38,6 +40,28 @@ STATE_TEXT = {
 }
 
 OUTLINE = {"outline_width": 2, "outline_color": [0, 0, 0, 200]}
+
+
+class Logo(NamedTuple):
+    size: float  # fraction of the key
+    valign: float  # -1 top, 0 middle, 1 bottom
+    halign: float = 0.0  # -1 left, 0 center, 1 right
+    opacity: float = 1.0
+    tint: tuple[int, int, int] | None = None
+
+
+# Faded and centered on keys with nothing to show, so they look intentional.
+LOGO_EMPTY = Logo(size=0.55, valign=0.0, opacity=0.25)
+
+
+def logo_header(on_color: bool) -> Logo:
+    """Small logo at the top; cream on orange/red keys, where orange would vanish."""
+    return Logo(size=0.4, valign=-0.9, tint=CLAUDE_CREAM if on_color else None)
+
+
+def logo_corner(on_color: bool) -> Logo:
+    """Small mark in the bottom-right corner of session keys, beside the age."""
+    return Logo(size=0.24, valign=0.92, halign=0.92, tint=CLAUDE_CREAM if on_color else None)
 
 # Short press jumps; a long press (hold-time, 0.5s by default) approves. Jumping
 # fires on a short release so that a long press doesn't also jump.
@@ -116,8 +140,9 @@ class ClaudeAction(ActionBase):
 
         self.store.approve(session, on_done=done)
 
-    def show(self, top: str, center: str, bottom: str, color: list[int], center_size: int = 14):
-        frame = (top, center, bottom, tuple(color), center_size)
+    def show(self, top: str, center: str, bottom: str, color: list[int], center_size: int = 14,
+             logo_style: Logo | None = None):
+        frame = (top, center, bottom, tuple(color), center_size, logo_style)
         if frame == self._shown or not self.get_is_present():
             return
         self._shown = frame
@@ -125,11 +150,16 @@ class ClaudeAction(ActionBase):
         self.set_center_label(center, font_size=center_size, update=False, **OUTLINE)
         self.set_bottom_label(bottom, font_size=11, update=False, **OUTLINE)
         self.set_background_color(color, update=False)
+        if logo_style:
+            self.set_media(image=logo(logo_style.opacity, logo_style.tint), size=logo_style.size,
+                           valign=logo_style.valign, halign=logo_style.halign, update=False)
+        else:
+            self.set_media(image=None, update=False)
         self.get_input().update()
 
     def show_session(self, session: dict | None, top_prefix: str = ""):
         if session is None:
-            self.show(top_prefix, "", "", EMPTY)
+            self.show(top_prefix, "", "", EMPTY, logo_style=LOGO_EMPTY)
             return
         state = session.get("state", IDLE)
         center, center_size = STATE_TEXT.get(state, state), 14
@@ -143,6 +173,7 @@ class ClaudeAction(ActionBase):
             # No pulsing for the session you're already looking at.
             color=state_color(state, blink=not self.store.is_watched(session)),
             center_size=center_size,
+            logo_style=logo_corner(on_color=state in (DONE, PERMISSION)),
         )
 
 
@@ -210,16 +241,18 @@ class NextWaiting(ClaudeAction):
         target = self.store.next_needing_attention()
 
         if not sessions:
-            self.show("Claude", "–", "No sessions", EMPTY)
+            self.show("", "", "No sessions", EMPTY, logo_style=logo_header(on_color=False))
         elif not waiting:
-            self.show("Claude", "0", "None waiting", [*COLORS[IDLE], 255], center_size=22)
+            self.show("", "0", "None waiting", [*COLORS[IDLE], 255], center_size=22,
+                      logo_style=logo_header(on_color=False))
         else:
             self.show(
-                "Claude",
+                "",
                 str(len(waiting)),
                 "→ " + truncate(target.get("project", "?"), 8),
                 state_color(target.get("state")),
                 center_size=22,
+                logo_style=logo_header(on_color=True),
             )
 
     def event_callback(self, event, data=None):
@@ -245,7 +278,7 @@ class SessionDial(ClaudeAction):
     def refresh(self):
         index, sessions = self.selected()
         if index < 0:
-            self.show("Claude", "–", "No sessions", EMPTY)
+            self.show("", "", "No sessions", EMPTY, logo_style=logo_header(on_color=False))
             return
         self.show_session(sessions[index], top_prefix=f"{index + 1}/{len(sessions)} ")
 

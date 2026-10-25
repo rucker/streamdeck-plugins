@@ -24,6 +24,8 @@ A session you're already looking at (its tmux pane is active and the terminal ha
 
 **Approving from the deck** answers "1. Yes" (never "don't ask again"), and only when the request came from a `PermissionRequest` hook (not a question) and the dialog is verifiably on screen (`tmux capture-pane`). Otherwise the key shows an error and nothing is sent.
 
+**Logo:** a Claude-style spark (drawn in code by `logo.py`) sits at the top of Next Waiting, in the corner of each session key, and faded on empty slots. To use the official Claude logo instead, save a PNG to `~/.local/share/claude-deck/logo.png` and restart StreamController. It's kept outside this repo on purpose, so the trademark isn't redistributed. On orange and red keys the logo is drawn as a cream silhouette.
+
 **How it works**
 
 1. `hooks/claude_deck_hook.py` runs on Claude Code's `SessionStart`, `UserPromptSubmit`, `PermissionRequest`, `PostToolUse`, `PostToolUseFailure`, `Notification`, `Stop` and `SessionEnd` hooks, and writes `~/.cache/claude-deck/<session_id>.json` with the state, project, `$TMUX_PANE` and a one-line summary of any pending permission request.
