@@ -18,20 +18,22 @@ from gi.repository import Adw
 from src.backend.DeckManagement.InputIdentifier import Input
 from src.backend.PluginManager.ActionBase import ActionBase
 
-from .sessions import DONE, IDLE, PERMISSION, WORKING, humanize_age
+from .sessions import DONE, IDLE, PERMISSION, UNKNOWN, WORKING, humanize_age
 
 COLORS = {
     WORKING: (37, 84, 160),
     IDLE: (55, 55, 55),
+    UNKNOWN: (55, 55, 55),
     DONE: (217, 119, 87),
     PERMISSION: (190, 35, 35),
 }
 EMPTY = [0, 0, 0, 0]
 
 STATE_TEXT = {
-    WORKING: "working",
-    IDLE: "ready",
-    DONE: "your turn",
+    WORKING: "Working",
+    IDLE: "Ready",
+    UNKNOWN: "No status",
+    DONE: "Your turn",
     PERMISSION: "APPROVE",
 }
 
@@ -61,6 +63,16 @@ def state_color(state: str, blink: bool = True) -> list[int]:
 
 def truncate(text: str, length: int) -> str:
     return text if len(text) <= length else text[: length - 1] + "…"
+
+
+def input_position(ident) -> tuple:
+    """Reading order on the deck: keys row by row, then dials left to right."""
+    if isinstance(ident, Input.Key):
+        x, y = ident.coords
+        return (0, y, x)
+    if isinstance(ident, Input.Dial):
+        return (1, 0, ident.index)
+    return (2, 0, 0)
 
 
 def wrap(text: str, width: int, lines: int) -> str:
@@ -127,7 +139,7 @@ class ClaudeAction(ActionBase):
         self.show(
             top=top_prefix + truncate(session.get("project", "?"), 10),
             center=center,
-            bottom=humanize_age(time.time() - session.get("since", time.time())),
+            bottom=humanize_age(time.time() - session["since"]) if session.get("since") else "",
             # No pulsing for the session you're already looking at.
             color=state_color(state, blink=not self.store.is_watched(session)),
             center_size=center_size,
@@ -140,12 +152,30 @@ class SessionSlot(ClaudeAction):
         self.has_configuration = True
 
     def slot(self) -> int:
-        return int(self.get_settings().get("slot", 1))
+        """Manual slot number, or 0 for automatic (numbered by position on the page)."""
+        return int(self.get_settings().get("slot", 0))
 
     def session(self) -> dict | None:
         sessions = self.store.sessions()
-        index = self.slot() - 1
-        return sessions[index] if 0 <= index < len(sessions) else None
+        index = self.slot() - 1 if self.slot() else self._auto_index(len(sessions))
+        return sessions[index] if index is not None and 0 <= index < len(sessions) else None
+
+    def _auto_index(self, session_count: int) -> int | None:
+        # Automatic slots number themselves left-to-right, top-to-bottom (keys,
+        # then dials), skipping sessions that manually numbered slots claim.
+        slots = {}
+        for action in self.page.get_all_actions():
+            if isinstance(action, SessionSlot):
+                slots.setdefault(input_position(action.input_ident), action)  # one per input, any state
+        manual = {a.slot() for a in slots.values() if a.slot()}
+        auto_positions = sorted(pos for pos, a in slots.items() if not a.slot())
+        free = [i for i in range(session_count) if i + 1 not in manual]
+
+        mine = input_position(self.input_ident)
+        if mine not in auto_positions:
+            return None
+        rank = auto_positions.index(mine)
+        return free[rank] if rank < len(free) else None
 
     def refresh(self):
         self.show_session(self.session())
@@ -158,9 +188,9 @@ class SessionSlot(ClaudeAction):
             self.approve(session)
 
     def get_config_rows(self) -> list:
-        row = Adw.SpinRow.new_with_range(1, 32, 1)
+        row = Adw.SpinRow.new_with_range(0, 32, 1)
         row.set_title("Session slot")
-        row.set_subtitle("Sessions are numbered in the order they started")
+        row.set_subtitle("0 = automatic, by position on the page. Sessions follow tmux window order")
         row.set_value(self.slot())
         row.connect("notify::value", self._on_slot_changed)
         return [row]
@@ -180,9 +210,9 @@ class NextWaiting(ClaudeAction):
         target = self.store.next_needing_attention()
 
         if not sessions:
-            self.show("Claude", "–", "no sessions", EMPTY)
+            self.show("Claude", "–", "No sessions", EMPTY)
         elif not waiting:
-            self.show("Claude", "0", "none waiting", [*COLORS[IDLE], 255], center_size=22)
+            self.show("Claude", "0", "None waiting", [*COLORS[IDLE], 255], center_size=22)
         else:
             self.show(
                 "Claude",
@@ -215,7 +245,7 @@ class SessionDial(ClaudeAction):
     def refresh(self):
         index, sessions = self.selected()
         if index < 0:
-            self.show("Claude", "–", "no sessions", EMPTY)
+            self.show("Claude", "–", "No sessions", EMPTY)
             return
         self.show_session(sessions[index], top_prefix=f"{index + 1}/{len(sessions)} ")
 

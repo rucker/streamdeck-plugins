@@ -22,12 +22,13 @@ WORKING = "working"
 IDLE = "idle"
 DONE = "done"
 PERMISSION = "permission"
+UNKNOWN = "unknown"  # Claude seen in tmux, but no hook has reported yet
 ATTENTION = (PERMISSION, DONE)
 
 TERMINAL_WM_CLASS = "org.gnome.Terminal"
 
 READ_CACHE_SECONDS = 0.5
-FOCUS_INTERVAL_SECONDS = 1
+TMUX_INTERVAL_SECONDS = 1
 PRUNE_INTERVAL_SECONDS = 10
 # Sessions outside tmux can't be checked for liveness; drop them once they've
 # been silent this long in case SessionEnd never fired (crash, kill -9).
@@ -53,6 +54,15 @@ def run_host(args: list[str], timeout: float = 3) -> subprocess.CompletedProcess
     return subprocess.run(args, capture_output=True, text=True, timeout=timeout)
 
 
+def project_name(cwd: str) -> str:
+    # Same naming as the hook's, so a placeholder keeps its label when replaced.
+    if not cwd:
+        return "?"
+    if os.path.normpath(cwd) == os.path.expanduser("~"):
+        return "~"
+    return os.path.basename(os.path.normpath(cwd))
+
+
 def humanize_age(seconds: float) -> str:
     seconds = max(0, int(seconds))
     if seconds < 60:
@@ -71,9 +81,13 @@ class SessionStore:
         self._suspects: set[str] = set()
         # The tmux pane you're looking at: active pane AND terminal focused.
         self.focused_pane: str | None = None
+        # pane_id -> sort key from its tmux position (session, window, pane).
+        self.pane_order: dict[str, tuple] = {}
+        # pane_id -> cwd for every tmux pane running claude, hooked or not.
+        self.claude_panes: dict[str, str] = {}
         self._stop = threading.Event()
         threading.Thread(target=self._prune_loop, daemon=True, name="ClaudeSessions-prune").start()
-        threading.Thread(target=self._focus_loop, daemon=True, name="ClaudeSessions-focus").start()
+        threading.Thread(target=self._tmux_loop, daemon=True, name="ClaudeSessions-tmux").start()
 
     def stop(self):
         self._stop.set()
@@ -83,12 +97,34 @@ class SessionStore:
     # ------------------------------------------------------------------ #
 
     def sessions(self) -> list[dict]:
-        """All known sessions in stable order (oldest first), so keys don't shuffle."""
+        """
+        All known sessions in tmux window order, so keys renumber the way tmux
+        windows do. Sessions outside tmux (or not yet seen there) go last, by
+        start time.
+        """
         with self._lock:
             if time.time() - self._last_read > READ_CACHE_SECONDS:
                 self._sessions = self._read_all()
                 self._last_read = time.time()
-            return list(self._sessions)
+            order = self.pane_order
+            return sorted(
+                self._sessions + self._unhooked_sessions(self._sessions),
+                key=lambda s: (0, order[s["tmux_pane"]]) if s.get("tmux_pane") in order
+                else (1, (s.get("started", 0), s.get("session_id", ""))),
+            )
+
+    def _unhooked_sessions(self, hooked: list[dict]) -> list[dict]:
+        """
+        Placeholders for Claude panes with no state file yet, e.g. sessions
+        started before the hooks were installed that haven't fired one since.
+        Replaced by the real record as soon as that session triggers a hook.
+        """
+        known = {s.get("tmux_pane") for s in hooked}
+        return [
+            {"session_id": f"tmux:{pane}", "tmux_pane": pane, "project": project_name(path),
+             "state": UNKNOWN, "started": 0}
+            for pane, path in self.claude_panes.items() if pane not in known
+        ]
 
     def _read_all(self) -> list[dict]:
         records = []
@@ -104,7 +140,6 @@ class SessionStore:
                     records.append(json.load(f))
             except (OSError, ValueError):
                 continue  # mid-write or removed; picked up next tick
-        records.sort(key=lambda r: (r.get("started", 0), r.get("session_id", "")))
         return records
 
     def is_watched(self, session: dict) -> bool:
@@ -130,15 +165,41 @@ class SessionStore:
             self._last_read = 0.0
 
     # ------------------------------------------------------------------ #
-    # Tracking which pane you're looking at
+    # Tracking tmux layout and which pane you're looking at
     # ------------------------------------------------------------------ #
 
-    def _focus_loop(self):
-        while not self._stop.wait(FOCUS_INTERVAL_SECONDS):
+    def _tmux_loop(self):
+        while not self._stop.wait(TMUX_INTERVAL_SECONDS):
+            try:
+                self.pane_order, self.claude_panes = self._read_tmux_panes()
+            except Exception:  # noqa: BLE001 - keep the last known layout
+                pass
             try:
                 self.focused_pane = self._read_focused_pane()
             except Exception:  # noqa: BLE001 - treat as "not looking at anything"
                 self.focused_pane = None
+
+    @staticmethod
+    def _read_tmux_panes() -> tuple[dict[str, tuple], dict[str, str]]:
+        """Returns (pane_id -> sort key, pane_id -> cwd for panes running claude)."""
+        result = run_host(["tmux", "list-panes", "-a", "-F", "\t".join([
+            "#{pane_id}", "#{session_name}", "#{window_index}", "#{pane_index}",
+            "#{pane_current_command}", "#{pane_current_path}",
+        ])])
+        if result.returncode != 0:
+            return {}, {}
+
+        def natural(name: str) -> tuple:
+            # Session "10" sorts after "2", like tmux's own ordering.
+            return (0, int(name), "") if name.isdigit() else (1, 0, name)
+
+        order, claude_panes = {}, {}
+        for line in result.stdout.splitlines():
+            pane_id, session, window, pane, command, path = line.split("\t", 5)
+            order[pane_id] = (natural(session), int(window), int(pane))
+            if command == "claude":
+                claude_panes[pane_id] = path
+        return order, claude_panes
 
     def _read_focused_pane(self) -> str | None:
         if not any(w.get("focus") for w in self._terminal_windows()):

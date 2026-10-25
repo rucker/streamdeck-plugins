@@ -8,14 +8,15 @@ Shows every running Claude Code session on the deck and jumps to it on press.
 
 | Color | State | Meaning |
 |---|---|---|
-| Grey | ready | New session, nothing asked yet |
-| Blue | working | Claude is busy |
-| Orange (pulsing) | your turn | Claude finished and is waiting for you |
+| Grey | Ready | New session, nothing asked yet |
+| Grey | No status | Claude is running in tmux but hasn't fired a hook yet (e.g. started before the hooks were installed) |
+| Blue | Working | Claude is busy |
+| Orange | Your turn | Claude finished and is waiting for you |
 | Red (pulsing) | APPROVE | Blocked on a permission prompt or question |
 
 **Actions**
 
-- **Session Slot** (key or dial): the Nth session, numbered by start order. Press to jump; **long-press to approve** a pending tool permission.
+- **Session Slot** (key or dial): one session per key. Press to jump; **long-press to approve** a pending tool permission. Slots are automatic by default: drop several on a page and they fill in reading order (keys row by row, then dials). Sessions follow tmux window order, so keys renumber the way tmux windows do (`renumber-windows`); sessions outside tmux come last. Set a slot number (1–32) to pin a key to the Nth session instead; automatic slots skip pinned ones.
 - **Next Waiting Session** (key or dial): how many sessions need you. Press to jump to the one that has waited longest; permission prompts come first.
 - **Session Picker** (dial): turn to pick a session, press or tap the strip to jump; long-press to approve.
 

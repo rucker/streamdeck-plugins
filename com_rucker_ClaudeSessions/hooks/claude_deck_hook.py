@@ -125,7 +125,8 @@ def main() -> None:
         {
             "session_id": session_id,
             "cwd": cwd,
-            "project": project_name(cwd),
+            # cwd follows Claude around (cd in Bash); keep the label stable.
+            "project": record.get("project") or project_name(cwd),
             "tmux_pane": os.environ.get("TMUX_PANE") or record.get("tmux_pane"),
             "started": record.get("started", now),
             "updated": now,
