@@ -35,3 +35,16 @@ A session you're already looking at (its tmux pane is active and the terminal ha
 **Requirements:** Claude Code running inside tmux, gnome-terminal, and the Window Calls GNOME extension.
 
 **Install:** `com_rucker_ClaudeSessions/install.sh`, then restart StreamController and any running Claude sessions.
+
+## Page Nav (`com_rucker_PageNav`)
+
+Swipe the touch strip to change pages, on every page, with nothing to set up per page, like Elgato's own software:
+
+- **Swipe left:** next page
+- **Swipe right:** previous page
+
+Pages follow the Page Manager's order and wrap around. Swipes never reach the page's own touch strip action (e.g. Better Volume Mixer Plus scrolls through apps on a swipe; that's lost); taps still work. A swipe while the screensaver is showing just wakes the deck.
+
+StreamController has no global inputs, so this wraps `DeckController.touchscreen_event_callback`, an internal rather than plugin API. If an update breaks it, swiping just stops changing pages.
+
+**Install:** `ln -s "$PWD/com_rucker_PageNav" ~/.var/app/com.core447.StreamController/data/plugins/`, then restart StreamController.
