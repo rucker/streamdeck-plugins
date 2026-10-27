@@ -22,6 +22,8 @@ from urllib.parse import urlparse
 # Deliberately not $XDG_CACHE_HOME: inside the StreamController Flatpak that
 # points into the sandbox, and both sides must agree on this path.
 STATE_DIR = os.path.expanduser("~/.cache/agent-deck")
+# Written by agent_deck_statusline.py; removed with the session.
+STATS_DIR = os.path.expanduser("~/.cache/agent-deck-stats")
 
 WORKING = "working"
 IDLE = "idle"  # fresh session, nothing asked yet
@@ -124,10 +126,11 @@ def main() -> None:
     path = os.path.join(STATE_DIR, f"{session_id}.json")
 
     if payload.get("hook_event_name") == "SessionEnd":
-        try:
-            os.remove(path)
-        except FileNotFoundError:
-            pass
+        for done in (path, os.path.join(STATS_DIR, f"{session_id}.json")):
+            try:
+                os.remove(done)
+            except FileNotFoundError:
+                pass
         return
 
     try:

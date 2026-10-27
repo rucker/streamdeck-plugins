@@ -18,6 +18,8 @@ from gi.repository import Gio, GLib
 from loguru import logger as log
 
 STATE_DIR = os.path.expanduser("~/.cache/agent-deck")
+# Per-session stats from hooks/agent_deck_statusline.py, kept apart from the hook's files.
+STATS_DIR = os.path.expanduser("~/.cache/agent-deck-stats")
 
 WORKING = "working"
 IDLE = "idle"
@@ -152,6 +154,14 @@ class SessionStore:
                     records.append(json.load(f))
             except (OSError, ValueError):
                 continue  # mid-write or removed; picked up next tick
+        for record in records:
+            try:
+                with open(os.path.join(STATS_DIR, f"{record.get('session_id')}.json")) as f:
+                    used = json.load(f).get("context_used_percentage")
+                if isinstance(used, (int, float)):
+                    record["context_used_percentage"] = used
+            except (OSError, ValueError, AttributeError):
+                pass  # no stats yet
         return records
 
     def is_watched(self, session: dict) -> bool:
@@ -262,10 +272,11 @@ class SessionStore:
         self._suspects = suspects
 
     def remove(self, session: dict):
-        try:
-            os.remove(os.path.join(STATE_DIR, f"{session['session_id']}.json"))
-        except (OSError, KeyError):
-            pass
+        for directory in (STATE_DIR, STATS_DIR):
+            try:
+                os.remove(os.path.join(directory, f"{session['session_id']}.json"))
+            except (OSError, KeyError):
+                pass
         self.invalidate()
 
     # ------------------------------------------------------------------ #

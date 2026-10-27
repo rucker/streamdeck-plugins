@@ -16,6 +16,8 @@ import { basename, join, normalize } from "node:path";
 import streamDeck from "@elgato/streamdeck";
 
 export const STATE_DIR = join(homedir(), ".cache", "agent-deck");
+// Per-session stats from hooks/agent_deck_statusline.py, kept apart from the hook's files.
+const STATS_DIR = join(homedir(), ".cache", "agent-deck-stats");
 
 export const WORKING = "working";
 export const IDLE = "idle";
@@ -74,6 +76,7 @@ export type Session = {
 	since?: number;
 	request?: string;
 	request_kind?: string;
+	context_used_percentage?: number; // from STATS_DIR, when the agent's status line has reported it
 };
 
 type Result = { ok: boolean; stdout: string; stderr: string };
@@ -193,6 +196,16 @@ export class SessionStore {
 				// mid-write or removed; picked up next tick
 			}
 		}
+		for (const record of records) {
+			try {
+				const stats = JSON.parse(readFileSync(join(STATS_DIR, `${record.session_id}.json`), "utf8"));
+				if (typeof stats.context_used_percentage === "number") {
+					record.context_used_percentage = stats.context_used_percentage;
+				}
+			} catch {
+				// no stats yet
+			}
+		}
 		return records;
 	}
 
@@ -310,10 +323,12 @@ export class SessionStore {
 	}
 
 	private remove(session: Session): void {
-		try {
-			unlinkSync(join(STATE_DIR, `${session.session_id}.json`));
-		} catch {
-			// already gone
+		for (const dir of [STATE_DIR, STATS_DIR]) {
+			try {
+				unlinkSync(join(dir, `${session.session_id}.json`));
+			} catch {
+				// already gone
+			}
 		}
 		this.invalidate();
 	}

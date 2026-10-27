@@ -197,6 +197,7 @@ export abstract class AgentAction<T extends JsonObject = JsonObject> extends Sin
 			color: stateColor(state, session.agent, !this.store.isWatched(session)),
 			centerSize,
 			agent: session.agent ?? CLAUDE,
+			note: session.context_used_percentage === undefined ? undefined : `${Math.round(session.context_used_percentage)}%`,
 		};
 	}
 

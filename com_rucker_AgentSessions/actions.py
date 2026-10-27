@@ -178,10 +178,12 @@ class AgentAction(ActionBase):
         # A dial's strip segment is wide enough to show what's being asked.
         if state == PERMISSION and session.get("request") and isinstance(self.input_ident, Input.Dial):
             center, center_size = wrap(session["request"], width=22, lines=2), 11
+        used = session.get("context_used_percentage")
         self.show(
             top=top_prefix + truncate(session.get("project", "?"), 10),
             center=center,
-            bottom="",
+            # Context use; centered, since StreamController labels can't be left-aligned.
+            bottom="" if used is None else f"{round(used)}%",
             # No pulsing for the session you're already looking at.
             color=state_color(state, session.get("agent", CLAUDE), blink=not self.store.is_watched(session)),
             center_size=center_size,

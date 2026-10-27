@@ -19,6 +19,7 @@ hook="$here/hooks/agent_deck_hook.py"
 statusline="$here/hooks/agent_deck_statusline.py"
 settings="$HOME/.claude/settings.json"
 copilot_settings="$HOME/.copilot/settings.json"
+grok_config="$HOME/.grok/config.toml"
 stamp="$(date +%Y%m%d%H%M%S)"
 
 # Until 2026-10-27 the plugin was Claude Sessions, and its IDs and files said
@@ -99,11 +100,16 @@ if command -v copilot >/dev/null || [ -d "$HOME/.copilot" ]; then
     has_copilot=1
     [ -f "$copilot_settings" ] && cp "$copilot_settings" "$copilot_settings.bak.$stamp"
 fi
+has_grok=0
+if command -v grok >/dev/null || [ -d "$HOME/.grok" ]; then
+    has_grok=1
+    [ -f "$grok_config" ] && cp "$grok_config" "$grok_config.bak.$stamp"
+fi
 
-python3 -I - "$settings" "$hook" "$statusline" "$copilot_settings" "$has_copilot" <<'EOF'
+python3 -I - "$settings" "$hook" "$statusline" "$copilot_settings" "$has_copilot" "$grok_config" "$has_grok" <<'EOF'
 import json, os, sys
 
-settings_path, hook, statusline, copilot_path, has_copilot = sys.argv[1:6]
+settings_path, hook, statusline, copilot_path, has_copilot, grok_path, has_grok = sys.argv[1:8]
 events = ["SessionStart", "UserPromptSubmit", "PermissionRequest", "PostToolUse",
           "PostToolUseFailure", "Notification", "Stop", "SessionEnd"]
 
@@ -165,8 +171,39 @@ if has_copilot == "1":
     # Copilot sends Claude-style payloads when hooks use Claude's event names.
     copilot = load(copilot_path)
     register(copilot, f"python3 -I {hook} --agent copilot || true")
+    # Its status line feeds the context figure on session keys.
+    current = copilot.get("statusLine")
+    if not current or os.path.basename(statusline) in str(current.get("command", "") if isinstance(current, dict) else ""):
+        copilot["statusLine"] = {"type": "command", "command": f"python3 -I {statusline} || true"}
+    else:
+        print("Left Copilot's status line alone; session keys won't show its context use.")
     save(copilot_path, copilot)
-    print(f"Registered {hook} in {copilot_path} (GitHub Copilot)")
+    print(f"Registered {hook} and the status line in {copilot_path} (GitHub Copilot)")
+
+if has_grok == "1":
+    # Grok reads its hooks from Claude's settings, but its status line only from
+    # its own config. Append one unless a status line is already configured.
+    try:
+        with open(grok_path) as f:
+            text = f.read()
+    except FileNotFoundError:
+        text = ""
+    try:
+        import tomllib
+        configured = "status_line" in tomllib.loads(text).get("ui", {})
+    except ImportError:
+        configured = "[ui.status_line]" in text
+    except tomllib.TOMLDecodeError:
+        configured = True  # not ours to fix; leave the file alone
+    if not configured:
+        os.makedirs(os.path.dirname(grok_path), exist_ok=True)
+        with open(grok_path, "a") as f:
+            f.write(("\n" if text and not text.endswith("\n") else "")
+                    + f'\n# Agent Sessions: feeds the context figure on session keys; prints nothing.\n'
+                    f'[ui.status_line]\ntype = "command"\ncommand = "python3 -I {statusline} || true"\n')
+        print(f"Set Grok's status line in {grok_path}")
+    elif os.path.basename(statusline) not in text:
+        print("Left Grok's status line alone; session keys won't show its context use.")
 EOF
 
 echo "$next"

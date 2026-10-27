@@ -40,6 +40,7 @@ export type Frame = {
 	centerSize?: number; // in StreamController's key-label points (14 = normal)
 	logo?: Logo;
 	agent?: string; // session keys: that agent's logo in a corner badge
+	note?: string; // bottom-left, level with the badge: the session's context use
 };
 
 function roundRect(x: number, y: number, w: number, h: number, r: number): string {
@@ -133,12 +134,12 @@ function placeBadge(agent: string, width: number, height: number, ringed: boolea
  * Keys go through Qt's SVG Tiny renderer, which ignores positioned tspans and
  * dominant-baseline, so each line is its own <text> on an explicit baseline.
  */
-function label(text: string, x: number, y: number, size: number, dark = false, lineHeight = 1.15): string {
+function label(text: string, x: number, y: number, size: number, dark = false, lineHeight = 1.15, anchor = "middle"): string {
 	if (!text) return "";
 	const lines = text.split("\n");
 	// y is the vertical center of the block; 0.35em puts a line's middle there.
 	const first = y - ((lines.length - 1) * size * lineHeight) / 2 + size * 0.35;
-	const common = `font-family="${FONT}" font-size="${size}" font-weight="600" text-anchor="middle"`;
+	const common = `font-family="${FONT}" font-size="${size}" font-weight="600" text-anchor="${anchor}"`;
 	const outline = dark
 		? `fill="none" stroke="white" stroke-opacity="0.6" stroke-width="${(size / 7).toFixed(1)}" stroke-linejoin="round"`
 		: `fill="none" stroke="black" stroke-opacity="0.8" stroke-width="${(size / 7).toFixed(1)}" stroke-linejoin="round"`;
@@ -162,6 +163,8 @@ function svg(width: number, height: number, frame: Frame, scale: number): string
 		label(frame.top, width / 2, height * 0.18, 12 * scale, light),
 		label(frame.center, width / 2, height * 0.52, center, light),
 		label(frame.bottom, width / 2, height * 0.86, 11 * scale, light),
+		// Level with the badge's center (placeBadge: 0.26 tall, inset 0.04).
+		frame.note ? label(frame.note, 0.06 * height, height * 0.83, 10 * scale, light, 1.15, "start") : "",
 	].join("");
 	const doc = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${body}</svg>`;
 	return `data:image/svg+xml;base64,${Buffer.from(doc).toString("base64")}`;
