@@ -15,13 +15,15 @@ import type { JsonObject } from "@elgato/utils";
 import { type Frame, keyImage, LOGO_EMPTY, type RGB, stripImage } from "../render";
 import { CLAUDE, DONE, IDLE, PERMISSION, type Session, SessionStore, store, UNKNOWN, WORKING } from "../sessions";
 
-export const COLORS: Record<string, RGB> = {
-	[WORKING]: [37, 84, 160],
-	[IDLE]: [55, 55, 55],
-	[UNKNOWN]: [55, 55, 55],
-	[DONE]: [217, 119, 87],
-	[PERMISSION]: [190, 35, 35],
+/** Each agent's own color for "your turn", and a dimmed one for "working". */
+const AGENT_COLORS: Record<string, { [DONE]: RGB; [WORKING]: RGB }> = {
+	claude: { [DONE]: [217, 119, 87], [WORKING]: [112, 56, 38] },
+	copilot: { [DONE]: [37, 84, 160], [WORKING]: [22, 46, 92] },
+	grok: { [DONE]: [232, 231, 226], [WORKING]: [92, 92, 92] },
 };
+export const READY: RGB = [30, 30, 32];
+const APPROVE: RGB = [247, 211, 74];
+const APPROVE_DIM: RGB = [121, 98, 18];
 
 const STATE_TEXT: Record<string, string> = {
 	[WORKING]: "Working",
@@ -35,13 +37,13 @@ const STATE_TEXT: Record<string, string> = {
 // hold time, and jumping fires on release so a long press doesn't also jump.
 const HOLD_MS = 500;
 
-export function stateColor(state: string | undefined, blink = true): RGB {
-	const color = COLORS[state ?? IDLE] ?? COLORS[IDLE];
-	// Only a blocked permission prompt pulses; a finished turn can wait.
-	if (blink && state === PERMISSION && Math.floor(Date.now() / 1000) % 2) {
-		return color.map((c) => Math.floor(c / 2)) as RGB;
+export function stateColor(state: string | undefined, agent = CLAUDE, blink = true): RGB {
+	if (state === PERMISSION) {
+		// Only a blocked permission prompt pulses; a finished turn can wait.
+		return blink && Math.floor(Date.now() / 1000) % 2 ? APPROVE_DIM : APPROVE;
 	}
-	return color;
+	const colors = AGENT_COLORS[agent] ?? AGENT_COLORS[CLAUDE];
+	return state === DONE || state === WORKING ? colors[state] : READY;
 }
 
 export function truncate(text: string, length: number): string {
@@ -192,7 +194,7 @@ export abstract class AgentAction<T extends JsonObject = JsonObject> extends Sin
 			center,
 			bottom: "",
 			// No pulsing for the session you're already looking at.
-			color: stateColor(state, !this.store.isWatched(session)),
+			color: stateColor(state, session.agent, !this.store.isWatched(session)),
 			centerSize,
 			agent: session.agent ?? CLAUDE,
 		};

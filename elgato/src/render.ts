@@ -94,6 +94,13 @@ function rgb([r, g, b]: RGB): string {
 	return `rgb(${r},${g},${b})`;
 }
 
+/** Light backgrounds (Grok's "your turn", approve) take dark text and a ringed badge. */
+export function isLight([r, g, b]: RGB): boolean {
+	return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 > 0.7;
+}
+
+const DARK_TEXT = "rgb(24,24,24)";
+
 function escape(text: string): string {
 	return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
@@ -111,7 +118,7 @@ function placeLogo(logo: Logo, width: number, height: number): string {
  * The agent's logo on a white disc in the bottom-right corner. The disc keeps
  * every logo legible, unaltered, on any key color.
  */
-function placeBadge(agent: string, width: number, height: number): string {
+function placeBadge(agent: string, width: number, height: number, ringed: boolean): string {
 	const body = agentLogo(agent);
 	if (!body) return "";
 	const size = 0.26 * height;
@@ -119,7 +126,8 @@ function placeBadge(agent: string, width: number, height: number): string {
 	const [cx, cy] = [width - inset - size / 2, height - inset - size / 2];
 	const logoSize = size * 0.64;
 	const at = `translate(${(cx - logoSize / 2).toFixed(1)},${(cy - logoSize / 2).toFixed(1)}) scale(${(logoSize / 24).toFixed(4)})`;
-	return `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${(size / 2).toFixed(1)}" fill="white"/><g transform="${at}">${body}</g>`;
+	const ring = ringed ? ` stroke="${DARK_TEXT}" stroke-width="${(size / 18).toFixed(1)}"` : "";
+	return `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${(size / 2).toFixed(1)}" fill="white"${ring}/><g transform="${at}">${body}</g>`;
 }
 
 /**
@@ -127,17 +135,20 @@ function placeBadge(agent: string, width: number, height: number): string {
  * Keys go through Qt's SVG Tiny renderer, which ignores positioned tspans and
  * dominant-baseline, so each line is its own <text> on an explicit baseline.
  */
-function label(text: string, x: number, y: number, size: number, lineHeight = 1.15): string {
+function label(text: string, x: number, y: number, size: number, dark = false, lineHeight = 1.15): string {
 	if (!text) return "";
 	const lines = text.split("\n");
 	// y is the vertical center of the block; 0.35em puts a line's middle there.
 	const first = y - ((lines.length - 1) * size * lineHeight) / 2 + size * 0.35;
 	const common = `font-family="${FONT}" font-size="${size}" font-weight="600" text-anchor="middle"`;
-	const outline = `fill="none" stroke="black" stroke-opacity="0.8" stroke-width="${(size / 7).toFixed(1)}" stroke-linejoin="round"`;
+	const outline = dark
+		? `fill="none" stroke="white" stroke-opacity="0.6" stroke-width="${(size / 7).toFixed(1)}" stroke-linejoin="round"`
+		: `fill="none" stroke="black" stroke-opacity="0.8" stroke-width="${(size / 7).toFixed(1)}" stroke-linejoin="round"`;
+	const fill = dark ? DARK_TEXT : "white";
 	return lines
 		.map((line, i) => {
 			const at = `x="${x}" y="${(first + i * size * lineHeight).toFixed(1)}"`;
-			return `<text ${at} ${common} ${outline}>${escape(line)}</text><text ${at} ${common} fill="white">${escape(line)}</text>`;
+			return `<text ${at} ${common} ${outline}>${escape(line)}</text><text ${at} ${common} fill="${fill}">${escape(line)}</text>`;
 		})
 		.join("");
 }
@@ -145,13 +156,14 @@ function label(text: string, x: number, y: number, size: number, lineHeight = 1.
 function svg(width: number, height: number, frame: Frame, scale: number): string {
 	const background = frame.color ? rgb(frame.color) : "black";
 	const center = (frame.centerSize ?? 14) * scale;
+	const light = !!frame.color && isLight(frame.color);
 	const body = [
 		`<rect width="${width}" height="${height}" fill="${background}"/>`,
 		frame.logo ? placeLogo(frame.logo, width, height) : "",
-		frame.agent ? placeBadge(frame.agent, width, height) : "",
-		label(frame.top, width / 2, height * 0.18, 12 * scale),
-		label(frame.center, width / 2, height * 0.52, center),
-		label(frame.bottom, width / 2, height * 0.86, 11 * scale),
+		frame.agent ? placeBadge(frame.agent, width, height, light) : "",
+		label(frame.top, width / 2, height * 0.18, 12 * scale, light),
+		label(frame.center, width / 2, height * 0.52, center, light),
+		label(frame.bottom, width / 2, height * 0.86, 11 * scale, light),
 	].join("");
 	const doc = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${body}</svg>`;
 	return `data:image/svg+xml;base64,${Buffer.from(doc).toString("base64")}`;

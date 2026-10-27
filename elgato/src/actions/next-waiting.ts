@@ -1,9 +1,8 @@
 import { type Action, action } from "@elgato/streamdeck";
 import type { JsonObject } from "@elgato/utils";
 
-import { type Frame, logoHeader } from "../render";
-import { IDLE } from "../sessions";
-import { COLORS, AgentAction, stateColor, truncate } from "./base";
+import { type Frame, isLight, logoHeader } from "../render";
+import { AgentAction, READY, stateColor, truncate } from "./base";
 
 /**
  * Shows how many sessions need you; press to jump to the one that has waited
@@ -20,15 +19,17 @@ export class NextWaiting extends AgentAction {
 			return { top: "", center: "", bottom: "No sessions", color: null, logo: logoHeader(false) };
 		}
 		if (!waiting.length || !target) {
-			return { top: "", center: "0", bottom: "None waiting", color: COLORS[IDLE], centerSize: 22, logo: logoHeader(false) };
+			return { top: "", center: "0", bottom: "None waiting", color: READY, centerSize: 22, logo: logoHeader(false) };
 		}
+		const color = stateColor(target.state, target.agent);
 		return {
 			top: "",
 			center: String(waiting.length),
 			bottom: "→ " + truncate(target.project ?? "?", 8),
-			color: stateColor(target.state),
+			color,
 			centerSize: 22,
-			logo: logoHeader(true),
+			// Cream on dark keys; the plain orange spark shows on light ones.
+			logo: logoHeader(!isLight(color)),
 		};
 	}
 

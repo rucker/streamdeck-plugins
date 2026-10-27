@@ -75,10 +75,11 @@ def logo(opacity: float = 1.0, tint: tuple[int, int, int] | None = None) -> Imag
 
 
 @lru_cache(maxsize=None)
-def agent_badge(agent: str) -> Image.Image | None:
+def agent_badge(agent: str, ringed: bool = False) -> Image.Image | None:
     """
     The agent's logo on a white disc, which keeps every logo legible, unaltered,
-    on any key color. None for an agent without a logo.
+    on any key color; `ringed` outlines the disc for light keys. None for an
+    agent without a logo.
     """
     try:
         with Image.open(os.path.join(ASSETS, f"{agent}.png")) as agent_logo:
@@ -86,7 +87,8 @@ def agent_badge(agent: str) -> Image.Image | None:
     except OSError:
         return None
     badge = Image.new("RGBA", (CANVAS, CANVAS), (0, 0, 0, 0))
-    ImageDraw.Draw(badge).ellipse([0, 0, CANVAS - 1, CANVAS - 1], fill=(255, 255, 255, 255))
+    ring = dict(outline=(24, 24, 24, 255), width=round(CANVAS / 18)) if ringed else {}
+    ImageDraw.Draw(badge).ellipse([0, 0, CANVAS - 1, CANVAS - 1], fill=(255, 255, 255, 255), **ring)
     size = round(CANVAS * 0.64)
     offset = (CANVAS - size) // 2
     badge.alpha_composite(mark.resize((size, size), Image.LANCZOS), (offset, offset))

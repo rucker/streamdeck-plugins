@@ -24,13 +24,15 @@ from .logo import CLAUDE_CREAM, agent_badge, logo
 from .sessions import CLAUDE, DONE, IDLE, PERMISSION, UNKNOWN, WORKING
 from .usage import humanize_until, meter_image, read_usage
 
-COLORS = {
-    WORKING: (37, 84, 160),
-    IDLE: (55, 55, 55),
-    UNKNOWN: (55, 55, 55),
-    DONE: (217, 119, 87),
-    PERMISSION: (190, 35, 35),
+# Each agent's own color for "your turn", and a dimmed one for "working".
+AGENT_COLORS = {
+    "claude": {DONE: (217, 119, 87), WORKING: (112, 56, 38)},
+    "copilot": {DONE: (37, 84, 160), WORKING: (22, 46, 92)},
+    "grok": {DONE: (232, 231, 226), WORKING: (92, 92, 92)},
 }
+READY = (30, 30, 32)
+APPROVE = (247, 211, 74)
+APPROVE_DIM = (121, 98, 18)
 EMPTY = [0, 0, 0, 0]
 
 STATE_TEXT = {
@@ -42,6 +44,14 @@ STATE_TEXT = {
 }
 
 OUTLINE = {"outline_width": 2, "outline_color": [0, 0, 0, 200]}
+# Light backgrounds (Grok's "your turn", approve) take dark text and a ringed badge.
+DARK_TEXT = {"color": [24, 24, 24, 255], "outline_width": 2, "outline_color": [255, 255, 255, 150]}
+LIGHT_TEXT = {"color": [255, 255, 255, 255], **OUTLINE}
+
+
+def is_light(color) -> bool:
+    r, g, b = color[:3]
+    return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 > 0.7
 
 
 class Logo(NamedTuple):
@@ -74,12 +84,12 @@ APPROVE_EVENTS = (
 )
 
 
-def state_color(state: str, blink: bool = True) -> list[int]:
-    rgb = COLORS.get(state, COLORS[IDLE])
-    # Only a blocked permission prompt pulses; a finished turn can wait.
-    if blink and state == PERMISSION and int(time.time()) % 2:
-        rgb = tuple(c // 2 for c in rgb)
-    return [*rgb, 255]
+def state_color(state: str, agent: str = CLAUDE, blink: bool = True) -> list[int]:
+    if state == PERMISSION:
+        # Only a blocked permission prompt pulses; a finished turn can wait.
+        return [*(APPROVE_DIM if blink and int(time.time()) % 2 else APPROVE), 255]
+    colors = AGENT_COLORS.get(agent, AGENT_COLORS[CLAUDE])
+    return [*colors.get(state, READY), 255]
 
 
 def truncate(text: str, length: int) -> str:
@@ -143,12 +153,14 @@ class AgentAction(ActionBase):
         if frame == self._shown or not self.get_is_present():
             return
         self._shown = frame
-        self.set_top_label(top, font_size=12, update=False, **OUTLINE)
-        self.set_center_label(center, font_size=center_size, update=False, **OUTLINE)
-        self.set_bottom_label(bottom, font_size=11, update=False, **OUTLINE)
+        light = is_light(color) and color[3] > 0
+        text = DARK_TEXT if light else LIGHT_TEXT
+        self.set_top_label(top, font_size=12, update=False, **text)
+        self.set_center_label(center, font_size=center_size, update=False, **text)
+        self.set_bottom_label(bottom, font_size=11, update=False, **text)
         self.set_background_color(color, update=False)
         # Session keys: the agent's logo in a corner badge.
-        if agent and (badge := agent_badge(agent)):
+        if agent and (badge := agent_badge(agent, ringed=light)):
             self.set_media(image=badge, size=0.26, valign=0.92, halign=0.92, update=False)
         elif logo_style:
             self.set_media(image=logo(logo_style.opacity, logo_style.tint), size=logo_style.size,
@@ -171,7 +183,7 @@ class AgentAction(ActionBase):
             center=center,
             bottom="",
             # No pulsing for the session you're already looking at.
-            color=state_color(state, blink=not self.store.is_watched(session)),
+            color=state_color(state, session.get("agent", CLAUDE), blink=not self.store.is_watched(session)),
             center_size=center_size,
             agent=session.get("agent", CLAUDE),
         )
@@ -243,16 +255,18 @@ class NextWaiting(AgentAction):
         if not sessions:
             self.show("", "", "No sessions", EMPTY, logo_style=logo_header(on_color=False))
         elif not waiting:
-            self.show("", "0", "None waiting", [*COLORS[IDLE], 255], center_size=22,
+            self.show("", "0", "None waiting", [*READY, 255], center_size=22,
                       logo_style=logo_header(on_color=False))
         else:
+            color = state_color(target.get("state"), target.get("agent", CLAUDE))
             self.show(
                 "",
                 str(len(waiting)),
                 "→ " + truncate(target.get("project", "?"), 8),
-                state_color(target.get("state")),
+                color,
                 center_size=22,
-                logo_style=logo_header(on_color=True),
+                # Cream on dark keys; the plain orange spark shows on light ones.
+                logo_style=logo_header(on_color=not is_light(color)),
             )
 
     def event_callback(self, event, data=None):

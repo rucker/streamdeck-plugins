@@ -60,13 +60,14 @@ Behaviors that are easy to break:
 - **Unhooked placeholders:** a pane running an agent with no state file shows as a placeholder (`tmux:%N`, state `unknown`). The agent comes from `#{pane_current_command}`: `copilot`, `grok` (or its platform binary name, e.g. `grok-macos-aarc`, truncated by tmux), or `claude`, which can also show up as Claude Code's version number (e.g. `2.1.311`, its process title on macOS).
 - **Automatic slots:** slots with slot `0` number themselves in reading order (keys row by row, then dials) and skip sessions claimed by manually numbered slots.
 - **Approve safety:** before sending `1`, approve checks with `tmux capture-pane` that the "❯ 1. Yes … Esc to cancel" dialog is on screen. It only ever sends `1`, never "don't ask again". Each approvable agent has its own pattern in `APPROVE_DIALOGS` (both front ends) and is listed in the hook's `APPROVABLE`. Copilot's dialog sits in a box ("Do you want to …?", then `❯ 1. Yes`, footer "↑/↓ to navigate · enter to select · esc to cancel"), and "1" answers it directly. Its pattern deliberately doesn't match Copilot's folder-trust question. Grok isn't approvable yet.
+- **Colors:** the agent sets the hue and the state its strength (`AGENT_COLORS` in `base.ts` and `actions.py`): "your turn" is the agent's full color, "working" a dimmed one. Ready and No status are near-black, and approve is yellow pulsing to mustard, for every agent. Keys whose background is light (`isLight` / `is_light`, luminance above 0.7: Grok's "your turn" and bright approve) get dark text and a ringed badge, decided from the color itself.
 - **Badges:** session keys show the agent's logo, unaltered, on a white disc (bottom-right). Don't recolor the logos: that's what the brand guidelines forbid. The drawn spark (Next Waiting, empty slots) is ours and can be tinted.
 - **Pruning:** a session is dropped only after two consecutive "dead" sightings, 10s apart.
 - **Watched sessions:** a session you're already looking at (its pane is tmux's active pane and the terminal is focused) doesn't count as waiting and doesn't blink. Only `permission` blinks.
 
 ## macOS specifics (`elgato/`)
 
-- **Commands:** `npm run check` (tsc), `npm run build` (rollup → `com.rucker.claude-sessions.sdPlugin/bin/plugin.js`), `npm run watch` (rebuild + `streamdeck restart` on save), `npx streamdeck validate com.rucker.claude-sessions.sdPlugin`.
+- **Commands:** `npm run check` (tsc), `npm run build` (rollup → `com.rucker.claude-sessions.sdPlugin/bin/plugin.js`), `npm run watch` (rebuild + `streamdeck restart` on save; needs developer mode), `npx streamdeck validate com.rucker.claude-sessions.sdPlugin`.
 - **Logs:** `com.rucker.claude-sessions.sdPlugin/logs/`.
 - **Terminal:** iTerm2 running plain tmux (same `tmux.conf` as Linux), not `tmux -CC` integration.
   - Raise it with `open -b com.googlecode.iterm2`.
@@ -98,10 +99,10 @@ Behaviors that are easy to break:
   - The bundled profile imports with the expected layout.
   - Key and touch strip rendering and fonts, the iTerm2 focus check, jumping to the pane, and the Usage meter.
   - The slot dropdown, and automatic numbering across keys and dials.
-  - Gotcha: if the app was already running when the plugin was linked, `streamdeck restart` does nothing. Quit and reopen the app once.
+  - Gotcha: `streamdeck restart` (and so `npm run watch`) only works with the app in developer mode. Without it, the app logs the restart link as handled and keeps the old plugin process, and the CLI still prints "Restarted". Rick's Mac has developer mode on (`streamdeck dev`, enabled 2026-10-27). `install.sh` deliberately doesn't turn it on, since it's an app-wide setting; it tells you to relaunch the app instead. To confirm a reload, check that the PID from `pgrep -f claude-sessions.sdPlugin/bin/plugin.js` changed.
 
   Still to verify on the Mac: hold-to-approve timing on hardware.
-- Agent Sessions (2026-10-27): the hook was verified end to end with real Copilot and Grok runs on the Mac (states, agent field, cleanup on exit), and the badges were checked with Qt's renderer and Pillow. On the Mac's deck, Copilot sessions show up (with their badge) once they've had a prompt. Fixed after that: unhooked placeholders and tmux ordering (the locale bug above, verified in the plugin's environment), and Copilot approval (verified end to end against a real Copilot dialog through the plugin's approve code). Still to verify on the deck: idle Copilot placeholders, holding to approve Copilot, a Grok session, and everything on Linux, where the plugin changes are compiled but untested in StreamController.
+- Agent Sessions (2026-10-27): the hook was verified end to end with real Copilot and Grok runs on the Mac (states, agent field, cleanup on exit), and the badges were checked with Qt's renderer and Pillow. On the Mac's deck, Copilot sessions show up (with their badge) once they've had a prompt. Fixed after that: unhooked placeholders and tmux ordering (the locale bug above, verified in the plugin's environment), and Copilot approval (verified end to end against a real Copilot dialog through the plugin's approve code). Confirmed on the Mac's deck (2026-10-27): holding to approve Copilot, and "No status" placeholders for idle Copilot and Grok sessions. Still to verify: everything on Linux, where the plugin changes are compiled but untested in StreamController.
 
 ## Conventions
 

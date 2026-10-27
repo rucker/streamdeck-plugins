@@ -8,13 +8,17 @@ Custom plugins for my Stream Deck+: [StreamController](https://github.com/Stream
 
 Shows every running coding agent session on the deck and jumps to it on press. Supported agents: **Claude Code**, **GitHub Copilot CLI** and **Grok**. Each session key shows its agent's logo in a corner badge.
 
-| Color | State | Meaning |
-|---|---|---|
-| Grey | Ready | New session, nothing asked yet |
-| Grey | No status | An agent is running in tmux but hasn't fired a hook yet (e.g. started before the hooks were installed) |
-| Blue | Working | The agent is busy |
-| Orange | Your turn | The agent finished and is waiting for you |
-| Red (pulsing) | APPROVE | Blocked on a permission prompt or question |
+Each agent has its own color. The state sets how strong it is: full strength when it's your turn, dimmed while the agent works.
+
+| State | Claude Code | Copilot | Grok | Meaning |
+|---|---|---|---|---|
+| Your turn | Orange | Blue | Near-white | The agent finished and is waiting for you |
+| Working | Brown | Dark blue | Grey | The agent is busy |
+| Ready | Near-black | Near-black | Near-black | New session, nothing asked yet |
+| No status | Near-black | Near-black | Near-black | An agent is running in tmux but hasn't fired a hook yet (e.g. started before the hooks were installed, or a Copilot session before its first prompt) |
+| APPROVE | Yellow (pulsing) | Yellow (pulsing) | Yellow (pulsing) | Blocked on a permission prompt or question |
+
+Light keys (Grok's "your turn", and approve) use dark text.
 
 **Actions**
 
@@ -29,7 +33,7 @@ A session you're already looking at (its tmux pane is active and the terminal ha
 
 **Usage meter data** is the real limit usage the API reports to Claude Code (subscribers only), not an estimate. `hooks/claude_deck_statusline.py` is registered as Claude Code's status line command: it receives `rate_limits` on every status line update, writes it to `~/.cache/claude-deck-usage.json`, and prints nothing. The numbers only move while a Claude Code session is talking to the API, so usage elsewhere (claude.ai, the apps) shows up with the next response. If you have your own status line, install.sh leaves it alone; pipe its stdin into `claude_deck_statusline.py` as well.
 
-**Logos:** each session key has its agent's logo on a white disc in the bottom-right corner, so every logo stays legible and unaltered on any key color. The logos come from [LobeHub Icons](https://github.com/lobehub/lobe-icons) (MIT); see `elgato/com.rucker.claude-sessions.sdPlugin/imgs/agents/NOTICE.md`. They're trademarks of Anthropic, GitHub and xAI, used only to show which agent a session belongs to. A spark drawn in code (`logo.py`) sits at the top of Next Waiting and faded on empty slots; on orange and red keys it's drawn as a cream silhouette.
+**Logos:** each session key has its agent's logo on a white disc in the bottom-right corner, so every logo stays legible and unaltered on any key color. The logos come from [LobeHub Icons](https://github.com/lobehub/lobe-icons) (MIT); see `elgato/com.rucker.claude-sessions.sdPlugin/imgs/agents/NOTICE.md`. They're trademarks of Anthropic, GitHub and xAI, used only to show which agent a session belongs to. A spark drawn in code (`logo.py`) sits at the top of Next Waiting and faded on empty slots; on dark colored keys it's drawn as a cream silhouette, and on light ones it stays orange.
 
 **How it works**
 
@@ -51,7 +55,7 @@ The same four actions for Elgato's Stream Deck app, written in TypeScript with E
 
 **Requirements (macOS):** the agents running inside tmux in iTerm2, Elgato's Stream Deck app 7.1+, Node 20+, and Elgato's CLI (`npm i -g @elgato/cli`) for linking.
 
-**Developing:** in `elgato/`, `npm run check` type-checks, `npm run build` bundles into `com.rucker.claude-sessions.sdPlugin/bin/`, and `npm run watch` rebuilds and restarts the plugin on save. Logs are in `com.rucker.claude-sessions.sdPlugin/logs/`.
+**Developing:** in `elgato/`, `npm run check` type-checks, `npm run build` bundles into `com.rucker.claude-sessions.sdPlugin/bin/`, and `npm run watch` rebuilds and restarts the plugin on save. Restarting the plugin from the command line (`streamdeck restart com.rucker.claude-sessions`, which `npm run watch` uses) needs the Stream Deck app's developer mode. Turn it on with `streamdeck dev` (`streamdeck dev -d` turns it off). Without it the command reports success but the old plugin keeps running, so quit and reopen the app instead. Logs are in `com.rucker.claude-sessions.sdPlugin/logs/`.
 
 ## Page Nav (`com_rucker_PageNav`)
 

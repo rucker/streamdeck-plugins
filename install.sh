@@ -36,7 +36,7 @@ Darwin)
     (cd "$elgato" && npm ci && npm run build)
     if command -v streamdeck >/dev/null; then
         streamdeck link "$elgato/com.rucker.claude-sessions.sdPlugin"
-        next="Restart the Stream Deck app (streamdeck restart com.rucker.claude-sessions)."
+        next="Quit and reopen the Stream Deck app to load the plugin, then restart any running agent sessions."
     else
         next="Install Elgato's CLI (npm i -g @elgato/cli), then: streamdeck link $elgato/com.rucker.claude-sessions.sdPlugin"
     fi
