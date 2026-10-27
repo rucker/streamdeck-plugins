@@ -142,8 +142,11 @@ def register(settings: dict, command: str) -> None:
         groups.append({"hooks": [{"type": "command", "command": command, "timeout": 5}]})
 
 
+# "|| true": if the hook can't even start (moved, renamed, python3 missing),
+# Python exits 2, which agents read as "block this action". The hook must
+# never block an agent, so any failure to launch it counts as success.
 settings = load(settings_path)
-register(settings, f"python3 -I {hook}")
+register(settings, f"python3 -I {hook} || true")
 
 # The status line is a single setting, so never replace someone else's.
 current = settings.get("statusLine")
@@ -161,7 +164,7 @@ print(f"Registered {hook} for {', '.join(events)} in {settings_path} (Claude Cod
 if has_copilot == "1":
     # Copilot sends Claude-style payloads when hooks use Claude's event names.
     copilot = load(copilot_path)
-    register(copilot, f"python3 -I {hook} --agent copilot")
+    register(copilot, f"python3 -I {hook} --agent copilot || true")
     save(copilot_path, copilot)
     print(f"Registered {hook} in {copilot_path} (GitHub Copilot)")
 EOF
