@@ -7,6 +7,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+import { humanizeUntil, usageColor, type UsageWindow } from "./usage";
+
 export const CLAUDE_ORANGE: RGB = [217, 119, 87];
 export const CLAUDE_CREAM: RGB = [250, 249, 245];
 
@@ -41,7 +43,7 @@ export function logoHeader(onColor: boolean): Logo {
 	return { size: 0.36, valign: -0.96, tint: onColor ? CLAUDE_CREAM : undefined };
 }
 
-/** Small mark in the bottom-right corner of session keys, beside the age. */
+/** Small mark in the bottom-right corner of session keys. */
 export function logoCorner(onColor: boolean): Logo {
 	return { size: 0.24, valign: 0.92, halign: 0.92, tint: onColor ? CLAUDE_CREAM : undefined };
 }
@@ -152,4 +154,53 @@ export function keyImage(frame: Frame): string {
 /** A touch strip segment for the "canvas" item of layouts/canvas.json. */
 export function stripImage(frame: Frame): string {
 	return svg(200, 100, frame, 1.35);
+}
+
+const TRACK = "rgb(60,60,60)";
+const DIM = "rgb(160,160,155)";
+
+/**
+ * The usage meter: two rows, one per window, with "5h 23%", a bar, and the time
+ * until it resets (beside the label on a strip segment, under the bar on a key,
+ * which is too narrow for both). Same layout as usage.py.
+ */
+function meterSvg(windows: UsageWindow[], width: number, height: number): string {
+	const wide = width >= 1.5 * height;
+	const pad = 8 * (width / (wide ? 200 : 120));
+	const rowH = (height - pad) / 2;
+	const textSize = rowH * (wide ? 0.36 : 0.3);
+	const smallSize = textSize * (wide ? 0.8 : 0.75);
+	const barH = rowH * (wide ? 0.2 : 0.16);
+	const font = `font-family="${FONT}" font-weight="700"`;
+
+	const rows = windows.map((w, i) => {
+		const top = pad / 2 + i * rowH;
+		const baseline = top + rowH * (wide ? 0.45 : 0.34);
+		const barTop = top + rowH * (wide ? 0.62 : 0.46);
+		const barW = width - 2 * pad;
+		const filled = (Math.min(w.percent, 100) / 100) * barW;
+		const reset = humanizeUntil(w.resetsAt);
+		return [
+			`<text x="${pad}" y="${baseline.toFixed(1)}" ${font} font-size="${textSize.toFixed(1)}" fill="white">${escape(`${w.label} ${Math.round(w.percent)}%`)}</text>`,
+			`<rect x="${pad}" y="${barTop.toFixed(1)}" width="${barW.toFixed(1)}" height="${barH.toFixed(1)}" rx="${(barH / 2).toFixed(1)}" fill="${TRACK}"/>`,
+			filled >= 0.5
+				? `<rect x="${pad}" y="${barTop.toFixed(1)}" width="${Math.max(filled, barH).toFixed(1)}" height="${barH.toFixed(1)}" rx="${(barH / 2).toFixed(1)}" fill="${rgb(usageColor(w.percent))}"/>`
+				: "",
+			!reset
+				? ""
+				: wide
+					? `<text x="${width - pad}" y="${baseline.toFixed(1)}" ${font} font-size="${smallSize.toFixed(1)}" fill="${DIM}" text-anchor="end">${reset}</text>`
+					: `<text x="${pad}" y="${(barTop + barH * 1.6 + smallSize * 0.8).toFixed(1)}" ${font} font-size="${smallSize.toFixed(1)}" fill="${DIM}">${reset}</text>`,
+		].join("");
+	});
+	const doc = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="${width}" height="${height}" fill="black"/>${rows.join("")}</svg>`;
+	return `data:image/svg+xml;base64,${Buffer.from(doc).toString("base64")}`;
+}
+
+export function meterKeyImage(windows: UsageWindow[]): string {
+	return meterSvg(windows, 144, 144);
+}
+
+export function meterStripImage(windows: UsageWindow[]): string {
+	return meterSvg(windows, 200, 100);
 }

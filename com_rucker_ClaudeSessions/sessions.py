@@ -63,15 +63,6 @@ def project_name(cwd: str) -> str:
     return os.path.basename(os.path.normpath(cwd))
 
 
-def humanize_age(seconds: float) -> str:
-    seconds = max(0, int(seconds))
-    if seconds < 60:
-        return f"{seconds}s"
-    minutes = seconds // 60
-    if minutes < 60:
-        return f"{minutes}m"
-    return f"{minutes // 60}h{minutes % 60:02d}"
-
 
 class SessionStore:
     def __init__(self):

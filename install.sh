@@ -6,11 +6,14 @@
 #   macOS: builds the Elgato Stream Deck plugin and links it into the Stream
 #          Deck app (needs Node 20+ and Elgato's CLI: npm i -g @elgato/cli).
 #   Both:  registers hooks/claude_deck_hook.py in ~/.claude/settings.json
-#          (idempotent; replaces entries pointing at an old copy; backs up first).
+#          (idempotent; replaces entries pointing at an old copy; backs up first),
+#          and hooks/claude_deck_statusline.py as the status line (feeds the
+#          Usage meter) unless you already have a status line of your own.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 hook="$here/hooks/claude_deck_hook.py"
+statusline="$here/hooks/claude_deck_statusline.py"
 settings="$HOME/.claude/settings.json"
 
 case "$(uname -s)" in
@@ -40,13 +43,13 @@ Darwin)
     ;;
 esac
 
-chmod +x "$hook"
+chmod +x "$hook" "$statusline"
 [ -f "$settings" ] && cp "$settings" "$settings.bak.$(date +%Y%m%d%H%M%S)"
 
-python3 -I - "$settings" "$hook" <<'EOF'
+python3 -I - "$settings" "$hook" "$statusline" <<'EOF'
 import json, os, sys
 
-settings_path, hook = sys.argv[1], sys.argv[2]
+settings_path, hook, statusline = sys.argv[1:4]
 events = ["SessionStart", "UserPromptSubmit", "PermissionRequest", "PostToolUse",
           "PostToolUseFailure", "Notification", "Stop", "SessionEnd"]
 command = f"python3 -I {hook}"
@@ -70,6 +73,16 @@ for event in events:
         g["hooks"] = [h for h in g.get("hooks", []) if not is_ours(h)]
     groups[:] = [g for g in groups if g["hooks"]]
     groups.append({"hooks": [{"type": "command", "command": command, "timeout": 5}]})
+
+# The status line is a single setting, so never replace someone else's.
+current = settings.get("statusLine")
+current_command = str(current.get("command", "")) if isinstance(current, dict) else ""
+if not current or current_command.endswith(os.path.basename(statusline)):
+    settings["statusLine"] = {"type": "command", "command": f"python3 -I {statusline}"}
+    print(f"Set the status line to {statusline} (feeds the Usage meter)")
+else:
+    print(f"Left your status line alone; the Usage meter needs {statusline} "
+          "to receive the status line JSON (pipe it in from yours).")
 
 os.makedirs(os.path.dirname(settings_path), exist_ok=True)
 with open(settings_path, "w") as f:

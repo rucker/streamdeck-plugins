@@ -10,13 +10,14 @@ import streamDeck from "@elgato/streamdeck";
 import { NextWaiting } from "./actions/next-waiting";
 import { SessionDial } from "./actions/session-dial";
 import { SessionSlot } from "./actions/session-slot";
+import { UsageMeter } from "./actions/usage-meter";
 
-const actions = [new SessionSlot(), new NextWaiting(), new SessionDial()];
+const actions = [new SessionSlot(), new NextWaiting(), new SessionDial(), new UsageMeter()];
 for (const action of actions) {
 	streamDeck.actions.registerAction(action);
 }
 
-// Ages, blinking and state changes all need a redraw; unchanged frames aren't resent.
+// Blinking, state changes and reset countdowns all need a redraw; unchanged frames aren't resent.
 setInterval(() => actions.forEach((a) => a.refreshAll()), 1000);
 
 streamDeck.connect();

@@ -83,6 +83,22 @@
 					"Image": "imgs/key"
 				}
 			]
+		},
+		{
+			"Name": "Usage Meter",
+			"UUID": "com.rucker.claude-sessions.usage",
+			"Icon": "imgs/spark-white",
+			"Tooltip": "Your plan's 5-hour and weekly usage limits, with the time until each resets.",
+			"Controllers": ["Keypad", "Encoder"],
+			"Encoder": {
+				"layout": "layouts/canvas.json"
+			},
+			"States": [
+				{
+					"Image": "imgs/key",
+					"ShowTitle": false
+				}
+			]
 		}
 	]
 }

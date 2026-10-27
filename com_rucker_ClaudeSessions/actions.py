@@ -5,6 +5,7 @@ Claude Sessions actions:
 - NextWaiting:  shows how many sessions need you; press to jump to the one
                 that has waited longest (permission prompts first).
 - SessionDial:  Stream Deck+ dial; turn to pick a session, press/tap to jump.
+- UsageMeter:   your plan's 5-hour and weekly usage, with time until each resets.
 """
 
 import textwrap
@@ -20,7 +21,8 @@ from src.backend.DeckManagement.InputIdentifier import Input
 from src.backend.PluginManager.ActionBase import ActionBase
 
 from .logo import CLAUDE_CREAM, logo
-from .sessions import DONE, IDLE, PERMISSION, UNKNOWN, WORKING, humanize_age
+from .sessions import DONE, IDLE, PERMISSION, UNKNOWN, WORKING
+from .usage import humanize_until, meter_image, read_usage
 
 COLORS = {
     WORKING: (37, 84, 160),
@@ -60,7 +62,7 @@ def logo_header(on_color: bool) -> Logo:
 
 
 def logo_corner(on_color: bool) -> Logo:
-    """Small mark in the bottom-right corner of session keys, beside the age."""
+    """Small mark in the bottom-right corner of session keys."""
     return Logo(size=0.24, valign=0.92, halign=0.92, tint=CLAUDE_CREAM if on_color else None)
 
 # Short press jumps; a long press (hold-time, 0.5s by default) approves. Jumping
@@ -169,7 +171,7 @@ class ClaudeAction(ActionBase):
         self.show(
             top=top_prefix + truncate(session.get("project", "?"), 10),
             center=center,
-            bottom=humanize_age(time.time() - session["since"]) if session.get("since") else "",
+            bottom="",
             # No pulsing for the session you're already looking at.
             color=state_color(state, blink=not self.store.is_watched(session)),
             center_size=center_size,
@@ -294,3 +296,30 @@ class SessionDial(ClaudeAction):
             self.store.jump_to(sessions[index])
         elif event in APPROVE_EVENTS:
             self.approve(sessions[index])
+
+
+class UsageMeter(ClaudeAction):
+    def image_size(self) -> tuple[int, int]:
+        if isinstance(self.input_ident, Input.Dial):
+            try:
+                touchscreen = self.deck_controller.inputs[Input.Touchscreen][0]
+                return touchscreen.get_dial_image_area_size()
+            except (AttributeError, IndexError, KeyError):
+                return 200, 100
+        return tuple(self.deck_controller.get_key_image_size() or (72, 72))
+
+    def refresh(self):
+        windows = read_usage()
+        if windows is None:
+            self.show("", "No usage\nyet", "", EMPTY, center_size=11, logo_style=LOGO_EMPTY)
+            return
+        # Redraw only when what's visible changes (percentages, or a reset countdown ticking over).
+        frame = ("meter", tuple((w.label, round(w.percent), humanize_until(w.resets_at)) for w in windows))
+        if frame == self._shown or not self.get_is_present():
+            return
+        self._shown = frame
+        for position in ("top", "center", "bottom"):
+            getattr(self, f"set_{position}_label")("", update=False)
+        self.set_background_color(EMPTY, update=False)
+        self.set_media(image=meter_image(windows, *self.image_size()), size=1.0, update=False)
+        self.get_input().update()

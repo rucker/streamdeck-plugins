@@ -74,14 +74,6 @@ export function projectName(cwd: string | undefined): string {
 	return basename(path);
 }
 
-export function humanizeAge(seconds: number): string {
-	seconds = Math.max(0, Math.floor(seconds));
-	if (seconds < 60) return `${seconds}s`;
-	const minutes = Math.floor(seconds / 60);
-	if (minutes < 60) return `${minutes}m`;
-	return `${Math.floor(minutes / 60)}h${String(minutes % 60).padStart(2, "0")}`;
-}
-
 /** tmux position of a pane: session (numeric names first, naturally), window, pane. */
 type PaneOrder = [number, number, string, number, number];
 

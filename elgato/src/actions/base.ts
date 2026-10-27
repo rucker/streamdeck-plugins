@@ -13,7 +13,7 @@ import {
 import type { JsonObject } from "@elgato/utils";
 
 import { type Frame, keyImage, logoCorner, LOGO_EMPTY, type RGB, stripImage } from "../render";
-import { DONE, humanizeAge, IDLE, PERMISSION, type Session, SessionStore, store, UNKNOWN, WORKING } from "../sessions";
+import { DONE, IDLE, PERMISSION, type Session, SessionStore, store, UNKNOWN, WORKING } from "../sessions";
 
 export const COLORS: Record<string, RGB> = {
 	[WORKING]: [37, 84, 160],
@@ -82,7 +82,7 @@ export function wrap(text: string, width: number, lines: number): string {
 export abstract class ClaudeAction<T extends JsonObject = JsonObject> extends SingletonAction<T> {
 	protected store = store;
 	protected settings = new Map<string, T>();
-	private shown = new Map<string, string>();
+	protected shown = new Map<string, string>();
 	private holds = new Map<string, { timer: NodeJS.Timeout; fired: boolean }>();
 
 	protected abstract frameFor(action: Action<T>): Frame;
@@ -190,7 +190,7 @@ export abstract class ClaudeAction<T extends JsonObject = JsonObject> extends Si
 		return {
 			top: topPrefix + truncate(session.project ?? "?", 10),
 			center,
-			bottom: session.since ? humanizeAge(Date.now() / 1000 - session.since) : "",
+			bottom: "",
 			// No pulsing for the session you're already looking at.
 			color: stateColor(state, !this.store.isWatched(session)),
 			centerSize,

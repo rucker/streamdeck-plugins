@@ -2,7 +2,7 @@
 
 Custom plugins for my Stream Deck+: [StreamController](https://github.com/StreamController/StreamController) plugins for Linux (`com_rucker_*`), and an Elgato Stream Deck app plugin for macOS (`elgato/`).
 
-**Install:** `./install.sh`. On Linux it links every `com_rucker_*` plugin into StreamController; on macOS it builds and links the Elgato plugin. On both it registers the Claude Sessions hook in `~/.claude/settings.json`. Then restart StreamController (or the Stream Deck app) and any running Claude sessions.
+**Install:** `./install.sh`. On Linux it links every `com_rucker_*` plugin into StreamController; on macOS it builds and links the Elgato plugin. On both it registers the Claude Sessions hook in `~/.claude/settings.json`, and sets the status line command that feeds the Usage meter (unless you already have a status line). Then restart StreamController (or the Stream Deck app) and any running Claude sessions.
 
 ## Claude Sessions (`com_rucker_ClaudeSessions`)
 
@@ -21,10 +21,13 @@ Shows every running Claude Code session on the deck and jumps to it on press.
 - **Session Slot** (key or dial): one session per key. Press to jump; **long-press to approve** a pending tool permission. Slots are automatic by default: drop several on a page and they fill in reading order (keys row by row, then dials). Sessions follow tmux window order, so keys renumber the way tmux windows do (`renumber-windows`); sessions outside tmux come last. Set a slot number (1–32) to pin a key to the Nth session instead; automatic slots skip pinned ones.
 - **Next Waiting Session** (key or dial): how many sessions need you. Press to jump to the one that has waited longest; permission prompts come first.
 - **Session Picker** (dial): turn to pick a session, press or tap the strip to jump; long-press to approve.
+- **Usage Meter** (key or dial): your plan's 5-hour and weekly usage limits as bars, with the time until each resets. Green, orange from 70%, red from 90%.
 
 A session you're already looking at (its tmux pane is active and the terminal has focus) doesn't count as waiting and doesn't pulse. On a dial, a red session's strip segment shows what Claude is asking for, e.g. `$ npm test` or `Edit main.py`.
 
 **Approving from the deck** answers "1. Yes" (never "don't ask again"), and only when the request came from a `PermissionRequest` hook (not a question) and the dialog is verifiably on screen (`tmux capture-pane`). Otherwise the key shows an error and nothing is sent.
+
+**Usage meter data** is the real limit usage the API reports to Claude Code (subscribers only), not an estimate. `hooks/claude_deck_statusline.py` is registered as Claude Code's status line command: it receives `rate_limits` on every status line update, writes it to `~/.cache/claude-deck-usage.json`, and prints nothing. The numbers only move while a Claude Code session is talking to the API, so usage elsewhere (claude.ai, the apps) shows up with the next response. If you have your own status line, install.sh leaves it alone; pipe its stdin into `claude_deck_statusline.py` as well.
 
 **Logo:** a Claude-style spark (drawn in code by `logo.py`) sits at the top of Next Waiting, in the corner of each session key, and faded on empty slots. To use the official Claude logo instead, save a PNG to `~/.local/share/claude-deck/logo.png` and restart StreamController. It's kept outside this repo on purpose, so the trademark isn't redistributed. On orange and red keys the logo is drawn as a cream silhouette.
 
@@ -39,7 +42,7 @@ A session you're already looking at (its tmux pane is active and the terminal ha
 
 ### On macOS (`elgato/`)
 
-The same three actions for Elgato's Stream Deck app, written in TypeScript with Elgato's SDK. They read the same hook state files, so the behavior and look match the Linux version, with a few platform differences:
+The same four actions for Elgato's Stream Deck app, written in TypeScript with Elgato's SDK. They read the same hook state files, so the behavior and look match the Linux version, with a few platform differences:
 
 - Jumping runs the same tmux commands, then brings iTerm2 forward with `open -b com.googlecode.iterm2`. "Already looking at it" means iTerm2 is the frontmost app (`lsappinfo front`) and the pane is tmux's active one. Neither needs an Automation or Accessibility permission. Plain tmux inside iTerm2 is assumed, not `tmux -CC` integration.
 - The Stream Deck app starts plugins with a minimal PATH, so the plugin adds `/opt/homebrew/bin` and `/usr/local/bin` to find tmux.
