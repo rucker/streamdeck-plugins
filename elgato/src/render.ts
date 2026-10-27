@@ -116,20 +116,24 @@ function placeLogo(logo: Logo, width: number, height: number): string {
 	return `<g transform="translate(${x.toFixed(1)},${y.toFixed(1)}) scale(${(size / 100).toFixed(4)})" opacity="${opacity}">${body}</g>`;
 }
 
-/** Text with a dark outline: drawn twice, since paint-order isn't reliably supported. */
+/**
+ * Text with a dark outline: drawn twice, since paint-order isn't reliably supported.
+ * Keys go through Qt's SVG Tiny renderer, which ignores positioned tspans and
+ * dominant-baseline, so each line is its own <text> on an explicit baseline.
+ */
 function label(text: string, x: number, y: number, size: number, lineHeight = 1.15): string {
 	if (!text) return "";
 	const lines = text.split("\n");
-	// y is the vertical center of the block.
-	const first = y - ((lines.length - 1) * size * lineHeight) / 2;
-	const tspans = lines
-		.map((line, i) => `<tspan x="${x}" y="${(first + i * size * lineHeight).toFixed(1)}">${escape(line)}</tspan>`)
+	// y is the vertical center of the block; 0.35em puts a line's middle there.
+	const first = y - ((lines.length - 1) * size * lineHeight) / 2 + size * 0.35;
+	const common = `font-family="${FONT}" font-size="${size}" font-weight="600" text-anchor="middle"`;
+	const outline = `fill="none" stroke="black" stroke-opacity="0.8" stroke-width="${(size / 7).toFixed(1)}" stroke-linejoin="round"`;
+	return lines
+		.map((line, i) => {
+			const at = `x="${x}" y="${(first + i * size * lineHeight).toFixed(1)}"`;
+			return `<text ${at} ${common} ${outline}>${escape(line)}</text><text ${at} ${common} fill="white">${escape(line)}</text>`;
+		})
 		.join("");
-	const common = `font-family="${FONT}" font-size="${size}" font-weight="600" text-anchor="middle" dominant-baseline="central"`;
-	return (
-		`<text ${common} fill="none" stroke="rgba(0,0,0,0.8)" stroke-width="${(size / 7).toFixed(1)}" stroke-linejoin="round">${tspans}</text>` +
-		`<text ${common} fill="white">${tspans}</text>`
-	);
 }
 
 function svg(width: number, height: number, frame: Frame, scale: number): string {

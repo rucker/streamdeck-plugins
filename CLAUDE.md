@@ -66,6 +66,7 @@ Behaviors that are easy to break:
   - Keys: 144×144 SVG data URLs via `setImage`.
   - Dials: one full-size pixmap (`layouts/canvas.json`, key `canvas`) set via `setFeedback`.
   - Text outlines are drawn as a stroked copy under the fill, because `paint-order` support in the app's SVG renderer isn't guaranteed.
+  - Key images are drawn by Qt's SVG Tiny renderer, which ignores `x`/`y` on `<tspan>`, `dominant-baseline` and `rgba()`. Give every line its own `<text>` with an explicit baseline. To preview keys the way the app draws them, render the SVG with PySide6's `QSvgRenderer`.
 - **Press and hold:** the SDK has no hold event. `base.ts` times key/dial down→up (500ms = hold = approve; a short release = jump). Touch taps use the payload's `hold` flag.
 - **Slot setting:** a `<sdpi-select>` in `ui/session-slot.html`, stored as a string. Always parse it with `Number(...)`.
 - **Bundled profile:** `scripts/profile.py` writes `profiles/claude-sessions.streamDeckProfile` (Stream Deck+ only) as part of `npm run build`. The app installs bundled profiles only for packaged plugins, not linked ones, so `install.sh` imports it with `open`, once.
@@ -84,14 +85,11 @@ Behaviors that are easy to break:
   - The plugin loads and connects, and the actions appear under the "Claude Sessions" category and work on the deck.
   - The hook and status line register, and the hook writes session state on macOS.
   - The bundled profile imports with the expected layout.
+  - Key and touch strip rendering and fonts, the iTerm2 focus check, jumping to the pane, and the Usage meter.
+  - The slot dropdown, and automatic numbering across keys and dials.
   - Gotcha: if the app was already running when the plugin was linked, `streamdeck restart` does nothing. Quit and reopen the app once.
 
-  Still to verify on the Mac:
-  - Key and strip rendering in the real app, especially the text outline and fonts.
-  - The iTerm2 focus check, jumping, and raising iTerm2.
-  - Hold-to-approve timing on hardware.
-  - The slot dropdown, and automatic numbering across keys and dials.
-  - The Usage meter on a key and a dial (the status line script is shared, so its data is already verified on Linux).
+  Still to verify on the Mac: hold-to-approve timing on hardware.
 
 ## Conventions
 
