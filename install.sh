@@ -2,7 +2,8 @@
 # Installs the deck plugins for this OS and the Agent Sessions state hook.
 #
 #   Linux: symlinks every com_rucker_* plugin into StreamController's (Flatpak)
-#          plugin dir.
+#          plugin dir, adds a ready-made "Agent Sessions" page if there's no
+#          page by that name, and restarts StreamController to load it all.
 #   macOS: builds the Elgato Stream Deck plugin and links it into the Stream
 #          Deck app (needs Node 20+ and Elgato's CLI: npm i -g @elgato/cli),
 #          and imports its ready-made Stream Deck+ profile if it isn't there yet.
@@ -44,10 +45,19 @@ migrate_layout() {  # <layout dir> <old id> <new id> <app name> <running? comman
 
 case "$(uname -s)" in
 Linux)
-    data="$HOME/.var/app/com.core447.StreamController/data"
+    app=com.core447.StreamController
+    data="$HOME/.var/app/$app/data"
     plugin_dir="$data/plugins"
-    migrate_layout "$data/pages" com_rucker_ClaudeSessions com_rucker_AgentSessions StreamController \
-        pgrep -f com.core447.StreamController
+    pages="$data/pages"
+    # Not pgrep -f: plugin backends run from paths containing the app ID.
+    sc_running() { flatpak ps --columns=application 2>/dev/null | grep -qx "$app"; }
+    # Stop it first: it only loads plugins at startup, and it could write its
+    # copy of a page back over the changes below.
+    if sc_running; then
+        flatpak kill "$app"
+        for _ in $(seq 50); do sc_running || break; sleep 0.2; done
+    fi
+    migrate_layout "$pages" com_rucker_ClaudeSessions com_rucker_AgentSessions StreamController sc_running
     [ -L "$plugin_dir/com_rucker_ClaudeSessions" ] && rm "$plugin_dir/com_rucker_ClaudeSessions"
     mkdir -p "$plugin_dir"
     for plugin in "$here"/com_rucker_*/; do
@@ -57,7 +67,36 @@ Linux)
         ln -sfn "$plugin" "$plugin_dir/$(basename "$plugin")"
         echo "Linked $plugin_dir/$(basename "$plugin") -> $plugin"
     done
-    next="Restart StreamController to load the plugins."
+    # The same layout as the macOS profile (elgato/scripts/profile.py): Next
+    # Waiting top-left, session slots on the other keys, the Usage meter and the
+    # Session Picker on the first two dials. Never touches an existing page.
+    mkdir -p "$pages"
+    python3 -I - "$pages/Agent Sessions.json" <<'PAGE'
+import json, os, sys
+
+path = sys.argv[1]
+if os.path.exists(path):
+    sys.exit()
+
+
+def slot(action: str) -> dict:
+    return {"states": {"0": {
+        "actions": [{"id": f"com_rucker_AgentSessions::{action}", "settings": {}}],
+        "image-control-action": 0,
+        "label-control-actions": [0, 0, 0],
+        "background-control-action": 0,
+    }}}
+
+
+keys = {f"{col}x{row}": slot("SessionSlot") for row in range(2) for col in range(4)}
+keys["0x0"] = slot("NextWaiting")
+page = {"keys": keys, "dials": {"0": slot("UsageMeter"), "1": slot("SessionDial")}}
+with open(path, "w") as f:
+    json.dump(page, f, indent=4)
+print(f"Added the StreamController page {path}")
+PAGE
+    setsid -f flatpak run --command=/app/bin/launch.sh "$app" --daemon-only >/dev/null 2>&1
+    next="Started StreamController in the background with the plugins loaded (open its window from the app menu)."
     ;;
 Darwin)
     elgato="$here/elgato"

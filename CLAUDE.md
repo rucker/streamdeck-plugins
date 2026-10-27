@@ -13,7 +13,7 @@ User-facing docs are in `README.md`. This file covers what you need to work on t
 |---|---|
 | `hooks/agent_deck_hook.py` | Agent hook (Claude Code, Copilot, Grok), shared by both platforms. Writes per-session state files. |
 | `hooks/agent_deck_statusline.py` | Status line command for Claude Code, Copilot and Grok, shared by both platforms. Writes each session's context use (and Copilot's AI Credits) to `~/.cache/agent-deck-stats/<session_id>.json`, and Claude's `rate_limits` to `~/.cache/agent-deck-usage.json` for the Usage meter; prints nothing. |
-| `install.sh` | OS-aware installer. Linux: symlinks `com_rucker_*` into StreamController. macOS: `npm ci && npm run build` in `elgato/`, then `streamdeck link`. Both: registers the hook in `~/.claude/settings.json` (Claude Code and Grok) and, if Copilot is installed, `~/.copilot/settings.json` (with `--agent copilot`), replacing entries for an older hook path, and sets the status line script as Claude's and Copilot's `statusLine` and Grok's `[ui.status_line]` (in `~/.grok/config.toml`), each unless a different status line is already set. |
+| `install.sh` | OS-aware installer. Linux: stops StreamController (`flatpak kill`), symlinks every `com_rucker_*` folder that has a `manifest.json`, writes an "Agent Sessions" page (same layout as the macOS profile) unless a page by that name exists, then starts it again with `--daemon-only`, as its autostart entry does. macOS: `npm ci && npm run build` in `elgato/`, then `streamdeck link`. Both: registers the hook in `~/.claude/settings.json` (Claude Code and Grok) and, if Copilot is installed, `~/.copilot/settings.json` (with `--agent copilot`), replacing entries for an older hook path, and sets the status line script as Claude's and Copilot's `statusLine` and Grok's `[ui.status_line]` (in `~/.grok/config.toml`), each unless a different status line is already set. |
 | `com_rucker_AgentSessions/` | Linux Agent Sessions (StreamController plugin). |
 | `com_rucker_PageNav/` | Linux only. Swipe the touch strip to change pages. Elgato's app does this natively. |
 | `com_rucker_ResumeFix/` | Linux only. USB-resets the deck on resume so it doesn't stay dark. |
@@ -92,6 +92,8 @@ Behaviors that are easy to break:
 
 - **Flatpak:** StreamController runs in a Flatpak. Host commands go through `flatpak-spawn --host --directory=~`, and `--directory` is required.
 - **Plugin manifests:** StreamController plugins need a `github` URL in `manifest.json` or `register()` fails. Use relative imports, because plugins load as `plugins.<folder>.main`.
+- **Running check:** use `flatpak ps`, not `pgrep -f com.core447.StreamController`, which also matches plugin backends (e.g. the OBS plugin's) that run from paths containing the app ID.
+- **Pages:** plain JSON in `data/pages/<name>.json`: `keys` keyed `"<col>x<row>"`, `dials` keyed by index, each `{"states": {"0": {"actions": [{"id": "<plugin>::<action>", "settings": {}}], …}}}`. The app only reads them at startup and may write its copy back, so edit them only while it's stopped.
 - **Internal hooks:** Page Nav and Resume Fix monkeypatch StreamController internals (`DeckController.touchscreen_event_callback`, `DeckManager.on_resumed`). If an update breaks them, look there first.
 
 ## Status
