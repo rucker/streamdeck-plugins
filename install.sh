@@ -52,6 +52,8 @@ Linux)
     mkdir -p "$plugin_dir"
     for plugin in "$here"/com_rucker_*/; do
         plugin="${plugin%/}"
+        # Skip leftovers such as an old plugin folder holding only __pycache__.
+        [ -f "$plugin/manifest.json" ] || continue
         ln -sfn "$plugin" "$plugin_dir/$(basename "$plugin")"
         echo "Linked $plugin_dir/$(basename "$plugin") -> $plugin"
     done
