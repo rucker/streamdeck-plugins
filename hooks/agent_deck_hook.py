@@ -6,7 +6,7 @@ Claude's hooks), and GitHub Copilot from ~/.copilot/settings.json with
 `--agent copilot`.
 
 Registered for several hook events (see install.sh). Reads the hook payload
-from stdin and writes ~/.cache/claude-deck/<session_id>.json atomically. It
+from stdin and writes ~/.cache/agent-deck/<session_id>.json atomically. It
 must never print to stdout (SessionStart/UserPromptSubmit stdout is injected
 into the agent's context) and must never fail the hook, so every error is
 swallowed and it always exits 0.
@@ -21,7 +21,7 @@ from urllib.parse import urlparse
 
 # Deliberately not $XDG_CACHE_HOME: inside the StreamController Flatpak that
 # points into the sandbox, and both sides must agree on this path.
-STATE_DIR = os.path.expanduser("~/.cache/claude-deck")
+STATE_DIR = os.path.expanduser("~/.cache/agent-deck")
 
 WORKING = "working"
 IDLE = "idle"  # fresh session, nothing asked yet

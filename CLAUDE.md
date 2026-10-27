@@ -11,20 +11,20 @@ User-facing docs are in `README.md`. This file covers what you need to work on t
 
 | Path | What |
 |---|---|
-| `hooks/claude_deck_hook.py` | Agent hook (Claude Code, Copilot, Grok), shared by both platforms. Writes per-session state files. |
-| `hooks/claude_deck_statusline.py` | Claude Code status line command, shared by both platforms. Writes `rate_limits` to `~/.cache/claude-deck-usage.json` for the Usage meter; prints nothing. |
+| `hooks/agent_deck_hook.py` | Agent hook (Claude Code, Copilot, Grok), shared by both platforms. Writes per-session state files. |
+| `hooks/agent_deck_statusline.py` | Claude Code status line command, shared by both platforms. Writes `rate_limits` to `~/.cache/agent-deck-usage.json` for the Usage meter; prints nothing. |
 | `install.sh` | OS-aware installer. Linux: symlinks `com_rucker_*` into StreamController. macOS: `npm ci && npm run build` in `elgato/`, then `streamdeck link`. Both: registers the hook in `~/.claude/settings.json` (Claude Code and Grok) and, if Copilot is installed, `~/.copilot/settings.json` (with `--agent copilot`), replacing entries for an older hook path, and sets `statusLine` to the status line script unless a different status line is already set. |
-| `com_rucker_ClaudeSessions/` | Linux Agent Sessions (StreamController plugin). |
+| `com_rucker_AgentSessions/` | Linux Agent Sessions (StreamController plugin). |
 | `com_rucker_PageNav/` | Linux only. Swipe the touch strip to change pages. Elgato's app does this natively. |
 | `com_rucker_ResumeFix/` | Linux only. USB-resets the deck on resume so it doesn't stay dark. |
 | `elgato/` | macOS Agent Sessions (Elgato SDK `@elgato/streamdeck` 3.x, Node, rollup). |
-| `tools/render_agent_logos.py` | Renders the agent logo SVGs (`elgato/…sdPlugin/imgs/agents/`) to PNGs for Linux (`com_rucker_ClaudeSessions/assets/`). Needs PySide6. Rerun after changing a logo. |
+| `tools/render_agent_logos.py` | Renders the agent logo SVGs (`elgato/…sdPlugin/imgs/agents/`) to PNGs for Linux (`com_rucker_AgentSessions/assets/`). Needs PySide6. Rerun after changing a logo. |
 
-Agent Sessions was called Claude Sessions until 2026-10-27. Internal names keep the old spelling on purpose: the plugin UUID (`com.rucker.claude-sessions`), the Linux plugin ID (`com_rucker_ClaudeSessions`), `~/.cache/claude-deck/` and the hook filename. Renaming them would break saved deck layouts and existing hook registrations.
+Agent Sessions was called Claude Sessions until 2026-10-27, and its IDs and files said "claude" (`com.rucker.claude-sessions`, `com_rucker_ClaudeSessions`, `~/.cache/claude-deck/`, `claude_deck_hook.py`, `claude_deck_statusline.py`, `~/.cache/claude-deck-usage.json`). `install.sh` migrates from those names: it rewrites the old plugin IDs in saved deck layouts (after archiving the layout folder, and only while the app is closed), removes the old plugin links, moves the state and usage files, and replaces hook and status line entries that use the old filenames. "Claude" stays only where something really is Claude's: the `claude` agent, its approval dialog, the Usage meter's rate limits, `~/.claude/settings.json`, and this file.
 
 ## Agent Sessions: two implementations, one contract
 
-The hook writes `~/.cache/claude-deck/<session_id>.json` atomically, and both front ends read it. These fields are the contract:
+The hook writes `~/.cache/agent-deck/<session_id>.json` atomically, and both front ends read it. These fields are the contract:
 
 - `session_id`, `cwd`
 - `agent`: `claude`, `copilot` or `grok`. Missing means `claude` (files from before the field existed).
@@ -41,9 +41,9 @@ How each agent feeds the hook (verified with Copilot CLI 1.0.104 and Grok 1.0.70
 - **Grok:** reads hooks from `~/.claude/settings.json` and sends Claude's snake_case keys. The hook tells it apart by `$GROK_HOOK_EVENT`. It has no `PermissionRequest` (a pending approval comes as `Notification` / `permission_prompt`), and it sends one more `Stop` after `SessionEnd`, so `Stop` and `Notification` never create a session.
 - **Copilot:** hooks registered under Claude's event names get Claude-style payloads, except `PermissionRequest`, which is camelCase (`sessionId`, `toolName`, `toolInput`) with no `hook_event_name`. `normalize()` in the hook maps it. Interactive Copilot fires `SessionStart` only with the first prompt, not at launch, so until then a new session is just an unhooked placeholder.
 
-The Usage meter reads `~/.cache/claude-deck-usage.json`: `updated` plus optional `five_hour` and `seven_day`, each `{used_percentage, resets_at}` (epoch seconds), copied from the status line payload's `rate_limits`. A missing window, or one whose `resets_at` has passed, counts as 0%. The file deliberately lives outside `~/.cache/claude-deck/`, because every `.json` file in that directory is read as a session.
+The Usage meter reads `~/.cache/agent-deck-usage.json`: `updated` plus optional `five_hour` and `seven_day`, each `{used_percentage, resets_at}` (epoch seconds), copied from the status line payload's `rate_limits`. A missing window, or one whose `resets_at` has passed, counts as 0%. The file deliberately lives outside `~/.cache/agent-deck/`, because every `.json` file in that directory is read as a session.
 
-If you change the hook or the file format, update both `com_rucker_ClaudeSessions/sessions.py` and `elgato/src/sessions.ts`.
+If you change the hook or the file format, update both `com_rucker_AgentSessions/sessions.py` and `elgato/src/sessions.ts`.
 
 Behavior is meant to match across platforms. When you change one side, port the change to the other:
 
@@ -67,8 +67,8 @@ Behaviors that are easy to break:
 
 ## macOS specifics (`elgato/`)
 
-- **Commands:** `npm run check` (tsc), `npm run build` (rollup → `com.rucker.claude-sessions.sdPlugin/bin/plugin.js`), `npm run watch` (rebuild + `streamdeck restart` on save; needs developer mode), `npx streamdeck validate com.rucker.claude-sessions.sdPlugin`.
-- **Logs:** `com.rucker.claude-sessions.sdPlugin/logs/`.
+- **Commands:** `npm run check` (tsc), `npm run build` (rollup → `com.rucker.agent-sessions.sdPlugin/bin/plugin.js`), `npm run watch` (rebuild + `streamdeck restart` on save; needs developer mode), `npx streamdeck validate com.rucker.agent-sessions.sdPlugin`.
+- **Logs:** `com.rucker.agent-sessions.sdPlugin/logs/`.
 - **Terminal:** iTerm2 running plain tmux (same `tmux.conf` as Linux), not `tmux -CC` integration.
   - Raise it with `open -b com.googlecode.iterm2`.
   - Check focus with `lsappinfo front` + `lsappinfo info -only bundleid`.
@@ -81,7 +81,7 @@ Behaviors that are easy to break:
   - Key images are drawn by Qt's SVG Tiny renderer, which ignores `x`/`y` on `<tspan>`, `dominant-baseline` and `rgba()`. Give every line its own `<text>` with an explicit baseline. To preview keys the way the app draws them, render the SVG with PySide6's `QSvgRenderer`.
 - **Press and hold:** the SDK has no hold event. `base.ts` times key/dial down→up (500ms = hold = approve; a short release = jump). Touch taps use the payload's `hold` flag.
 - **Slot setting:** a `<sdpi-select>` in `ui/session-slot.html`, stored as a string. Always parse it with `Number(...)`.
-- **Bundled profile:** `scripts/profile.py` writes `profiles/claude-sessions.streamDeckProfile` (Stream Deck+ only) as part of `npm run build`. The app installs bundled profiles only for packaged plugins, not linked ones, so `install.sh` imports it with `open`, once.
+- **Bundled profile:** `scripts/profile.py` writes `profiles/agent-sessions.streamDeckProfile` (Stream Deck+ only) as part of `npm run build`. The app installs bundled profiles only for packaged plugins, not linked ones, so `install.sh` imports it with `open`, once.
 - **Agent logos:** `render.ts` reads `imgs/agents/<agent>.svg` (located from `import.meta.url`) and inlines its paths, since Qt's renderer can't be trusted with nested `<image>` SVGs. Licensing and sources are in `imgs/agents/NOTICE.md`.
 
 ## Linux specifics
@@ -99,7 +99,7 @@ Behaviors that are easy to break:
   - The bundled profile imports with the expected layout.
   - Key and touch strip rendering and fonts, the iTerm2 focus check, jumping to the pane, and the Usage meter.
   - The slot dropdown, and automatic numbering across keys and dials.
-  - Gotcha: `streamdeck restart` (and so `npm run watch`) only works with the app in developer mode. Without it, the app logs the restart link as handled and keeps the old plugin process, and the CLI still prints "Restarted". Rick's Mac has developer mode on (`streamdeck dev`, enabled 2026-10-27). `install.sh` deliberately doesn't turn it on, since it's an app-wide setting; it tells you to relaunch the app instead. To confirm a reload, check that the PID from `pgrep -f claude-sessions.sdPlugin/bin/plugin.js` changed.
+  - Gotcha: `streamdeck restart` (and so `npm run watch`) only works with the app in developer mode. Without it, the app logs the restart link as handled and keeps the old plugin process, and the CLI still prints "Restarted". Rick's Mac has developer mode on (`streamdeck dev`, enabled 2026-10-27). `install.sh` deliberately doesn't turn it on, since it's an app-wide setting; it tells you to relaunch the app instead. To confirm a reload, check that the PID from `pgrep -f agent-sessions.sdPlugin/bin/plugin.js` changed.
 
   Still to verify on the Mac: hold-to-approve timing on hardware.
 - Agent Sessions (2026-10-27): the hook was verified end to end with real Copilot and Grok runs on the Mac (states, agent field, cleanup on exit), and the badges were checked with Qt's renderer and Pillow. On the Mac's deck, Copilot sessions show up (with their badge) once they've had a prompt. Fixed after that: unhooked placeholders and tmux ordering (the locale bug above, verified in the plugin's environment), and Copilot approval (verified end to end against a real Copilot dialog through the plugin's approve code). Confirmed on the Mac's deck (2026-10-27): holding to approve Copilot, and "No status" placeholders for idle Copilot and Grok sessions. Still to verify: everything on Linux, where the plugin changes are compiled but untested in StreamController.

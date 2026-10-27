@@ -1,7 +1,7 @@
 /**
  * Your plan's usage limits (5-hour and weekly), as recorded by the status line
- * command in ../hooks/claude_deck_statusline.py; the macOS counterpart of
- * com_rucker_ClaudeSessions/usage.py.
+ * command in ../hooks/agent_deck_statusline.py; the macOS counterpart of
+ * com_rucker_AgentSessions/usage.py.
  *
  * The numbers are what Claude Code last heard from the API, so they only move
  * while a Claude Code session is talking to it.
@@ -13,8 +13,8 @@ import { join } from "node:path";
 
 import type { RGB } from "./render";
 
-// Outside ~/.cache/claude-deck/ on purpose: every .json file there is a session.
-export const USAGE_FILE = join(homedir(), ".cache", "claude-deck-usage.json");
+// Outside ~/.cache/agent-deck/ on purpose: every .json file there is a session.
+export const USAGE_FILE = join(homedir(), ".cache", "agent-deck-usage.json");
 
 export const USAGE_OK: RGB = [120, 140, 93];
 export const USAGE_WARN: RGB = [217, 119, 87];

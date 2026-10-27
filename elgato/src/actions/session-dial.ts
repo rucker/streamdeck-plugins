@@ -6,7 +6,7 @@ import { type Session } from "../sessions";
 import { AgentAction } from "./base";
 
 /** Stream Deck+ dial: turn to pick a session, press/tap to jump, hold to approve. */
-@action({ UUID: "com.rucker.claude-sessions.dial" })
+@action({ UUID: "com.rucker.agent-sessions.dial" })
 export class SessionDial extends AgentAction {
 	private selectedIds = new Map<string, string>();
 

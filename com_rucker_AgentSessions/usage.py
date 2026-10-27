@@ -1,6 +1,6 @@
 """
 Your plan's usage limits (5-hour and weekly), as recorded by the status line
-command in ../hooks/claude_deck_statusline.py, and the meter image for them.
+command in ../hooks/agent_deck_statusline.py, and the meter image for them.
 
 The numbers are what Claude Code last heard from the API, so they only move
 while a Claude Code session is talking to it; usage elsewhere (claude.ai, the
@@ -15,7 +15,7 @@ from typing import NamedTuple
 
 from PIL import Image, ImageDraw, ImageFont
 
-USAGE_FILE = os.path.expanduser("~/.cache/claude-deck-usage.json")
+USAGE_FILE = os.path.expanduser("~/.cache/agent-deck-usage.json")
 
 OK = (120, 140, 93)
 WARN = (217, 119, 87)

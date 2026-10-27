@@ -1,8 +1,8 @@
 /**
  * Session store and tmux/iTerm2 plumbing shared by all Agent Sessions actions;
- * the macOS counterpart of com_rucker_ClaudeSessions/sessions.py.
+ * the macOS counterpart of com_rucker_AgentSessions/sessions.py.
  *
- * The hook (hooks/claude_deck_hook.py at the repo root) writes one JSON file
+ * The hook (hooks/agent_deck_hook.py at the repo root) writes one JSON file
  * per agent session (Claude Code, Copilot or Grok) into STATE_DIR. Every
  * action redraws once a second, so reads are cached and shared through a
  * single SessionStore.
@@ -15,7 +15,7 @@ import { basename, join, normalize } from "node:path";
 
 import streamDeck from "@elgato/streamdeck";
 
-export const STATE_DIR = join(homedir(), ".cache", "claude-deck");
+export const STATE_DIR = join(homedir(), ".cache", "agent-deck");
 
 export const WORKING = "working";
 export const IDLE = "idle";

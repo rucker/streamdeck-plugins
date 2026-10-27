@@ -8,7 +8,7 @@ import { AgentAction, READY, stateColor, truncate } from "./base";
  * Shows how many sessions need you; press to jump to the one that has waited
  * longest (permission prompts first).
  */
-@action({ UUID: "com.rucker.claude-sessions.next-waiting" })
+@action({ UUID: "com.rucker.agent-sessions.next-waiting" })
 export class NextWaiting extends AgentAction {
 	protected frameFor(_action: Action<JsonObject>): Frame {
 		const sessions = this.store.sessions();

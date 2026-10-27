@@ -28,7 +28,7 @@ function compare(a: number[], b: number[]): number {
 }
 
 /** Shows the Nth active agent session; press to jump, hold to approve. */
-@action({ UUID: "com.rucker.claude-sessions.slot" })
+@action({ UUID: "com.rucker.agent-sessions.slot" })
 export class SessionSlot extends AgentAction<SlotSettings> {
 	/** Manual slot number, or 0 for automatic (numbered by position on the page). */
 	private slot(action: Action<SlotSettings>): number {

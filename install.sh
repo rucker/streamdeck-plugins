@@ -6,23 +6,48 @@
 #   macOS: builds the Elgato Stream Deck plugin and links it into the Stream
 #          Deck app (needs Node 20+ and Elgato's CLI: npm i -g @elgato/cli),
 #          and imports its ready-made Stream Deck+ profile if it isn't there yet.
-#   Both:  registers hooks/claude_deck_hook.py in ~/.claude/settings.json (Claude
+#   Both:  registers hooks/agent_deck_hook.py in ~/.claude/settings.json (Claude
 #          Code, and Grok, which reads Claude's hooks) and, if Copilot is
 #          installed, in ~/.copilot/settings.json (idempotent; replaces entries
 #          pointing at an old copy; backs up first). Also sets
-#          hooks/claude_deck_statusline.py as Claude's status line (feeds the
+#          hooks/agent_deck_statusline.py as Claude's status line (feeds the
 #          Usage meter) unless you already have a status line of your own.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-hook="$here/hooks/claude_deck_hook.py"
-statusline="$here/hooks/claude_deck_statusline.py"
+hook="$here/hooks/agent_deck_hook.py"
+statusline="$here/hooks/agent_deck_statusline.py"
 settings="$HOME/.claude/settings.json"
 copilot_settings="$HOME/.copilot/settings.json"
+stamp="$(date +%Y%m%d%H%M%S)"
+
+# Until 2026-10-27 the plugin was Claude Sessions, and its IDs and files said
+# "claude". migrate_layout rewrites old IDs in an app's saved layouts, after
+# archiving the whole folder next to it. The app must not be running, or it
+# could write its old copy back.
+migrate_layout() {  # <layout dir> <old id> <new id> <app name> <running? command>
+    local dir="$1" old="$2" new="$3" app="$4"
+    shift 4
+    grep -rqsIF "$old" "$dir" || return 0
+    if "$@" >/dev/null; then
+        echo "Your $app layouts still use the old plugin ID. Quit $app, then run this again." >&2
+        exit 1
+    fi
+    tar -czf "$dir.bak.$stamp.tar.gz" -C "$(dirname "$dir")" "$(basename "$dir")"
+    grep -rlsIF "$old" "$dir" | while IFS= read -r file; do
+        python3 -I -c 'import sys; p, a, b = sys.argv[1:]; s = open(p).read(); open(p, "w").write(s.replace(a, b))' \
+            "$file" "$old" "$new"
+    done
+    echo "Migrated your $app layouts to the new plugin ID (backup: $dir.bak.$stamp.tar.gz)"
+}
 
 case "$(uname -s)" in
 Linux)
-    plugin_dir="$HOME/.var/app/com.core447.StreamController/data/plugins"
+    data="$HOME/.var/app/com.core447.StreamController/data"
+    plugin_dir="$data/plugins"
+    migrate_layout "$data/pages" com_rucker_ClaudeSessions com_rucker_AgentSessions StreamController \
+        pgrep -f com.core447.StreamController
+    [ -L "$plugin_dir/com_rucker_ClaudeSessions" ] && rm "$plugin_dir/com_rucker_ClaudeSessions"
     mkdir -p "$plugin_dir"
     for plugin in "$here"/com_rucker_*/; do
         plugin="${plugin%/}"
@@ -33,19 +58,23 @@ Linux)
     ;;
 Darwin)
     elgato="$here/elgato"
+    app_data="$HOME/Library/Application Support/com.elgato.StreamDeck"
+    profiles="$app_data/ProfilesV3"
+    migrate_layout "$profiles" com.rucker.claude-sessions com.rucker.agent-sessions "Stream Deck" \
+        pgrep -x "Stream Deck"
+    [ -L "$app_data/Plugins/com.rucker.claude-sessions.sdPlugin" ] && rm "$app_data/Plugins/com.rucker.claude-sessions.sdPlugin"
     (cd "$elgato" && npm ci && npm run build)
     if command -v streamdeck >/dev/null; then
-        streamdeck link "$elgato/com.rucker.claude-sessions.sdPlugin"
+        streamdeck link "$elgato/com.rucker.agent-sessions.sdPlugin"
         next="Quit and reopen the Stream Deck app to load the plugin, then restart any running agent sessions."
     else
-        next="Install Elgato's CLI (npm i -g @elgato/cli), then: streamdeck link $elgato/com.rucker.claude-sessions.sdPlugin"
+        next="Install Elgato's CLI (npm i -g @elgato/cli), then: streamdeck link $elgato/com.rucker.agent-sessions.sdPlugin"
     fi
     # A linked plugin doesn't get its bundled profile installed, so import it,
-    # once: the app adds a new copy on every import.
-    profiles="$HOME/Library/Application Support/com.elgato.StreamDeck/ProfilesV3"
-    # Before the rename, the profile was called "Claude Sessions".
-    if ! grep -qsE '"Name":"(Agent|Claude) Sessions"' "$profiles"/*.sdProfile/manifest.json; then
-        open "$elgato/com.rucker.claude-sessions.sdPlugin/profiles/claude-sessions.streamDeckProfile"
+    # once (the app adds a new copy on every import): only if no profile uses
+    # the plugin yet.
+    if ! grep -rqsF com.rucker.agent-sessions "$profiles"; then
+        open "$elgato/com.rucker.agent-sessions.sdPlugin/profiles/agent-sessions.streamDeckProfile"
         echo "Imported the Agent Sessions profile into the Stream Deck app"
     fi
     ;;
@@ -55,8 +84,15 @@ Darwin)
     ;;
 esac
 
+# Sessions and usage recorded under the old names keep showing.
+if [ -d "$HOME/.cache/claude-deck" ]; then
+    mkdir -p "$HOME/.cache/agent-deck"
+    find "$HOME/.cache/claude-deck" -maxdepth 1 -name '*.json' -exec mv {} "$HOME/.cache/agent-deck/" \;
+    rm -rf "$HOME/.cache/claude-deck"
+fi
+[ -f "$HOME/.cache/claude-deck-usage.json" ] && mv "$HOME/.cache/claude-deck-usage.json" "$HOME/.cache/agent-deck-usage.json"
+
 chmod +x "$hook" "$statusline"
-stamp="$(date +%Y%m%d%H%M%S)"
 [ -f "$settings" ] && cp "$settings" "$settings.bak.$stamp"
 has_copilot=0
 if command -v copilot >/dev/null || [ -d "$HOME/.copilot" ]; then
@@ -87,10 +123,15 @@ def save(path: str, settings: dict) -> None:
         f.write("\n")
 
 
+# Names from before the rename to Agent Sessions.
+OLD_HOOK, OLD_STATUSLINE = "claude_deck_hook.py", "claude_deck_statusline.py"
+
+
 def register(settings: dict, command: str) -> None:
     def is_ours(h: dict) -> bool:
-        # Also matches entries for a copy of the hook that has since moved.
-        return os.path.basename(hook) in str(h.get("command", ""))
+        # Also matches entries for a copy of the hook that has since moved or been renamed.
+        command = str(h.get("command", ""))
+        return os.path.basename(hook) in command or OLD_HOOK in command
 
     hooks = settings.setdefault("hooks", {})
     for event in events:
@@ -107,7 +148,7 @@ register(settings, f"python3 -I {hook}")
 # The status line is a single setting, so never replace someone else's.
 current = settings.get("statusLine")
 current_command = str(current.get("command", "")) if isinstance(current, dict) else ""
-if not current or current_command.endswith(os.path.basename(statusline)):
+if not current or current_command.endswith((os.path.basename(statusline), OLD_STATUSLINE)):
     settings["statusLine"] = {"type": "command", "command": f"python3 -I {statusline}"}
     print(f"Set the status line to {statusline} (feeds the Usage meter)")
 else:

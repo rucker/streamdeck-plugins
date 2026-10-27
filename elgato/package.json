@@ -1,10 +1,10 @@
 {
-    "name": "claude-sessions-elgato",
+    "name": "agent-sessions-elgato",
     "private": true,
     "scripts": {
         "build": "rollup -c && python3 -I scripts/profile.py",
         "check": "tsc --noEmit",
-        "watch": "rollup -c -w --watch.onEnd=\"streamdeck restart com.rucker.claude-sessions\""
+        "watch": "rollup -c -w --watch.onEnd=\"streamdeck restart com.rucker.agent-sessions\""
     },
     "type": "module",
     "devDependencies": {

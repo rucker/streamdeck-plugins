@@ -13,8 +13,8 @@ from PySide6.QtGui import QGuiApplication, QImage, QPainter
 from PySide6.QtSvg import QSvgRenderer
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
-SOURCE = os.path.join(ROOT, "elgato", "com.rucker.claude-sessions.sdPlugin", "imgs", "agents")
-OUT = os.path.join(ROOT, "com_rucker_ClaudeSessions", "assets")
+SOURCE = os.path.join(ROOT, "elgato", "com.rucker.agent-sessions.sdPlugin", "imgs", "agents")
+OUT = os.path.join(ROOT, "com_rucker_AgentSessions", "assets")
 SIZE = 256
 
 

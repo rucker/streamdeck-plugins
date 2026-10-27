@@ -9,8 +9,8 @@ import { fileURLToPath } from "node:url";
 
 import { humanizeUntil, usageColor, type UsageWindow } from "./usage";
 
-export const CLAUDE_ORANGE: RGB = [217, 119, 87];
-export const CLAUDE_CREAM: RGB = [250, 249, 245];
+export const SPARK_ORANGE: RGB = [217, 119, 87];
+export const SPARK_CREAM: RGB = [250, 249, 245];
 
 export type RGB = [number, number, number];
 
@@ -33,7 +33,7 @@ export const LOGO_EMPTY: Logo = { size: 0.55, valign: 0, opacity: 0.25 };
 
 /** Small logo at the top; cream on orange/red keys, where orange would vanish. */
 export function logoHeader(onColor: boolean): Logo {
-	return { size: 0.36, valign: -0.96, tint: onColor ? CLAUDE_CREAM : undefined };
+	return { size: 0.36, valign: -0.96, tint: onColor ? SPARK_CREAM : undefined };
 }
 
 export type Frame = {
@@ -111,7 +111,7 @@ function placeLogo(logo: Logo, width: number, height: number): string {
 	const x = ((width - size) * ((logo.halign ?? 0) + 1)) / 2;
 	const y = ((height - size) * (logo.valign + 1)) / 2;
 	const opacity = logo.opacity ?? 1;
-	return `<g transform="translate(${x.toFixed(1)},${y.toFixed(1)}) scale(${(size / 100).toFixed(4)})" opacity="${opacity}">${spark(rgb(logo.tint ?? CLAUDE_ORANGE))}</g>`;
+	return `<g transform="translate(${x.toFixed(1)},${y.toFixed(1)}) scale(${(size / 100).toFixed(4)})" opacity="${opacity}">${spark(rgb(logo.tint ?? SPARK_ORANGE))}</g>`;
 }
 
 /**

@@ -20,7 +20,7 @@ from gi.repository import Adw
 from src.backend.DeckManagement.InputIdentifier import Input
 from src.backend.PluginManager.ActionBase import ActionBase
 
-from .logo import CLAUDE_CREAM, agent_badge, logo
+from .logo import SPARK_CREAM, agent_badge, logo
 from .sessions import CLAUDE, DONE, IDLE, PERMISSION, UNKNOWN, WORKING
 from .usage import humanize_until, meter_image, read_usage
 
@@ -68,7 +68,7 @@ LOGO_EMPTY = Logo(size=0.55, valign=0.0, opacity=0.25)
 
 def logo_header(on_color: bool) -> Logo:
     """Small logo at the top; cream on orange/red keys, where orange would vanish."""
-    return Logo(size=0.4, valign=-0.9, tint=CLAUDE_CREAM if on_color else None)
+    return Logo(size=0.4, valign=-0.9, tint=SPARK_CREAM if on_color else None)
 
 # Short press jumps; a long press (hold-time, 0.5s by default) approves. Jumping
 # fires on a short release so that a long press doesn't also jump.

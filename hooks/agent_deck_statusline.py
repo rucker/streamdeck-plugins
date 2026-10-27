@@ -18,9 +18,9 @@ import sys
 import tempfile
 import time
 
-# Outside ~/.cache/claude-deck/ on purpose: every .json file there is read as a
+# Outside ~/.cache/agent-deck/ on purpose: every .json file there is read as a
 # session state file.
-USAGE_FILE = os.path.expanduser("~/.cache/claude-deck-usage.json")
+USAGE_FILE = os.path.expanduser("~/.cache/agent-deck-usage.json")
 
 WINDOWS = ("five_hour", "seven_day")
 
@@ -55,7 +55,7 @@ def main() -> None:
         pass
 
     directory = os.path.dirname(USAGE_FILE)
-    fd, tmp = tempfile.mkstemp(dir=directory, prefix=".claude-deck-usage.", suffix=".tmp")
+    fd, tmp = tempfile.mkstemp(dir=directory, prefix=".agent-deck-usage.", suffix=".tmp")
     with os.fdopen(fd, "w") as f:
         json.dump(record, f)
     os.replace(tmp, USAGE_FILE)

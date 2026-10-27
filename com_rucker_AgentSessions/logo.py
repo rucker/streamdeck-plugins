@@ -12,8 +12,8 @@ from PIL import Image, ImageDraw
 
 ASSETS = os.path.join(os.path.dirname(os.path.realpath(__file__)), "assets")
 
-CLAUDE_ORANGE = (217, 119, 87)
-CLAUDE_CREAM = (250, 249, 245)
+SPARK_ORANGE = (217, 119, 87)
+SPARK_CREAM = (250, 249, 245)
 
 # Ray lengths (fraction of the radius), deliberately uneven so it reads as a
 # hand-drawn spark rather than a mechanical asterisk.
@@ -55,7 +55,7 @@ def _draw_spark(color: tuple[int, int, int]) -> Image.Image:
 
 @lru_cache(maxsize=None)
 def _base_logo() -> Image.Image:
-    return _draw_spark(CLAUDE_ORANGE)
+    return _draw_spark(SPARK_ORANGE)
 
 
 @lru_cache(maxsize=None)

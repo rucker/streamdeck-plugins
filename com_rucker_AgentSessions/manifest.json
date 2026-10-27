@@ -1,6 +1,6 @@
 {
     "version": "0.1.0",
-    "id": "com_rucker_ClaudeSessions",
+    "id": "com_rucker_AgentSessions",
     "name": "Agent Sessions",
     "github": "https://github.com/rucker/streamdeck-plugins",
     "descriptions": {

@@ -1,6 +1,6 @@
 # Agent logos
 
-`claude.svg`, `copilot.svg` and `grok.svg` are the Claude, GitHub Copilot and Grok marks from [LobeHub Icons](https://github.com/lobehub/lobe-icons) (`@lobehub/icons-static-svg` 1.101.0), reduced to their path data with each brand's own color. `com_rucker_ClaudeSessions/assets/*.png` are renderings of these files, made by `tools/render_agent_logos.py`.
+`claude.svg`, `copilot.svg` and `grok.svg` are the Claude, GitHub Copilot and Grok marks from [LobeHub Icons](https://github.com/lobehub/lobe-icons) (`@lobehub/icons-static-svg` 1.101.0), reduced to their path data with each brand's own color. `com_rucker_AgentSessions/assets/*.png` are renderings of these files, made by `tools/render_agent_logos.py`.
 
 The logos are trademarks of their owners (Anthropic, GitHub and xAI). They're used only to show which agent a session belongs to, never altered or recolored, and don't imply any endorsement.
 

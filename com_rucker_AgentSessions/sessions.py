@@ -1,7 +1,7 @@
 """
 Session store and window/tmux plumbing shared by all Agent Sessions actions.
 
-The hook (hooks/claude_deck_hook.py at the repo root) writes one JSON file per
+The hook (hooks/agent_deck_hook.py at the repo root) writes one JSON file per
 agent session (Claude Code, Copilot or Grok) into STATE_DIR. Every action ticks
 once a second, so reads are cached and shared through the plugin's single
 SessionStore instance.
@@ -17,7 +17,7 @@ import time
 from gi.repository import Gio, GLib
 from loguru import logger as log
 
-STATE_DIR = os.path.expanduser("~/.cache/claude-deck")
+STATE_DIR = os.path.expanduser("~/.cache/agent-deck")
 
 WORKING = "working"
 IDLE = "idle"

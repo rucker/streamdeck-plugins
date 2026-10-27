@@ -6,7 +6,7 @@ import path from "node:path";
 import url from "node:url";
 
 const isWatching = !!process.env.ROLLUP_WATCH;
-const sdPlugin = "com.rucker.claude-sessions.sdPlugin";
+const sdPlugin = "com.rucker.agent-sessions.sdPlugin";
 
 /**
  * @type {import('rollup').RollupOptions}

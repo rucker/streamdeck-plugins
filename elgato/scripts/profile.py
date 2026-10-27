@@ -6,8 +6,8 @@ import sys
 import uuid
 import zipfile
 
-PLUGIN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "com.rucker.claude-sessions.sdPlugin")
-OUT = os.path.join(PLUGIN_DIR, "profiles", "claude-sessions.streamDeckProfile")
+PLUGIN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "com.rucker.agent-sessions.sdPlugin")
+OUT = os.path.join(PLUGIN_DIR, "profiles", "agent-sessions.streamDeckProfile")
 STREAM_DECK_PLUS = "20GBD9901"
 NAMESPACE = uuid.UUID("6f1c7a52-3d0e-4b8e-9a51-0c2f6a1d7e43")
 
