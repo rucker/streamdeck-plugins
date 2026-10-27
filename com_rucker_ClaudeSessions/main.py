@@ -3,7 +3,7 @@ Claude Sessions - StreamController plugin
 
 Shows the state of every running Claude Code session (working / your turn /
 needs approval) and jumps to its tmux pane on press. State comes from the
-Claude Code hook in hooks/claude_deck_hook.py.
+Claude Code hook in ../hooks/claude_deck_hook.py.
 """
 
 from src.backend.DeckManagement.InputIdentifier import Input

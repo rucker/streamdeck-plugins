@@ -1,7 +1,7 @@
 """
 Session store and window/tmux plumbing shared by all Claude Sessions actions.
 
-The hook (hooks/claude_deck_hook.py) writes one JSON file per Claude Code
+The hook (hooks/claude_deck_hook.py at the repo root) writes one JSON file per Claude Code
 session into STATE_DIR. Every action ticks once a second, so reads are cached
 and shared through the plugin's single SessionStore instance.
 """

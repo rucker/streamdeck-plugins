@@ -1,0 +1,10 @@
+{
+    "id": "com.rucker.claude-sessions.canvas",
+    "items": [
+        {
+            "key": "canvas",
+            "type": "pixmap",
+            "rect": [0, 0, 200, 100]
+        }
+    ]
+}

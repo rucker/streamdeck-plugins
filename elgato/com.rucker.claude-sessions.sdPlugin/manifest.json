@@ -1,0 +1,88 @@
+{
+	"Name": "Claude Sessions",
+	"Version": "0.1.0.0",
+	"Author": "Rick Ucker",
+	"Description": "Shows which Claude Code sessions are working, finished, or waiting for approval, and jumps to the session's tmux pane in iTerm2 on press.",
+	"UUID": "com.rucker.claude-sessions",
+	"Category": "Claude Sessions",
+	"CategoryIcon": "imgs/spark-white",
+	"Icon": "imgs/plugin",
+	"CodePath": "bin/plugin.js",
+	"SDKVersion": 3,
+	"Software": {
+		"MinimumVersion": "7.1"
+	},
+	"OS": [
+		{
+			"Platform": "mac",
+			"MinimumVersion": "12"
+		}
+	],
+	"Nodejs": {
+		"Version": "24",
+		"Debug": "enabled"
+	},
+	"Actions": [
+		{
+			"Name": "Session Slot",
+			"UUID": "com.rucker.claude-sessions.slot",
+			"Icon": "imgs/spark-white",
+			"Tooltip": "One Claude session per key or dial. Press to jump to it; hold to approve a pending permission.",
+			"PropertyInspectorPath": "ui/session-slot.html",
+			"Controllers": ["Keypad", "Encoder"],
+			"Encoder": {
+				"layout": "layouts/canvas.json",
+				"TriggerDescription": {
+					"Push": "Jump (hold to approve)",
+					"Touch": "Jump (hold to approve)"
+				}
+			},
+			"States": [
+				{
+					"Image": "imgs/key",
+					"ShowTitle": false
+				}
+			]
+		},
+		{
+			"Name": "Next Waiting Session",
+			"UUID": "com.rucker.claude-sessions.next-waiting",
+			"Icon": "imgs/spark-white",
+			"Tooltip": "How many Claude sessions need you. Press to jump to the one that has waited longest.",
+			"Controllers": ["Keypad", "Encoder"],
+			"Encoder": {
+				"layout": "layouts/canvas.json",
+				"TriggerDescription": {
+					"Push": "Jump to next waiting",
+					"Touch": "Jump to next waiting"
+				}
+			},
+			"States": [
+				{
+					"Image": "imgs/key",
+					"ShowTitle": false
+				}
+			]
+		},
+		{
+			"Name": "Session Picker",
+			"UUID": "com.rucker.claude-sessions.dial",
+			"Icon": "imgs/spark-white",
+			"Tooltip": "Turn to pick a Claude session, press or tap to jump, hold to approve.",
+			"Controllers": ["Encoder"],
+			"Encoder": {
+				"layout": "layouts/canvas.json",
+				"TriggerDescription": {
+					"Rotate": "Pick a session",
+					"Push": "Jump (hold to approve)",
+					"Touch": "Jump (hold to approve)"
+				}
+			},
+			"States": [
+				{
+					"Image": "imgs/key"
+				}
+			]
+		}
+	]
+}
