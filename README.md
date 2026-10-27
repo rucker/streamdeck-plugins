@@ -48,3 +48,11 @@ Pages follow the Page Manager's order and wrap around. Swipes never reach the pa
 StreamController has no global inputs, so this wraps `DeckController.touchscreen_event_callback`, an internal rather than plugin API. If an update breaks it, swiping just stops changing pages.
 
 **Install:** `ln -s "$PWD/com_rucker_PageNav" ~/.var/app/com.core447.StreamController/data/plugins/`, then restart StreamController.
+
+## Resume Fix (`com_rucker_ResumeFix`)
+
+Wakes the deck after suspend. StreamController notices the resume and reloads the page, but the deck can stay dark until the app is restarted. A restart works because startup USB-resets the deck first. This plugin makes resume do the same: close the old handles, USB-reset the deck, then let the normal resume code reopen it and reload the page.
+
+Use it with Settings → "Use new resume mode (beta)" **off**; the beta mode takes a different path that this doesn't touch. Like Page Nav, it wraps an internal (`DeckManager.on_resumed`), not plugin API.
+
+**Install:** `ln -s "$PWD/com_rucker_ResumeFix" ~/.var/app/com.core447.StreamController/data/plugins/`, then restart StreamController.

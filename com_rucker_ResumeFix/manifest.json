@@ -1,0 +1,15 @@
+{
+    "version": "0.1.0",
+    "id": "com_rucker_ResumeFix",
+    "name": "Resume Fix",
+    "github": "https://github.com/rucker/streamdeck-plugins",
+    "descriptions": {
+        "en_US": "Wakes the deck after suspend by resetting it the way StreamController does at startup."
+    },
+    "short-descriptions": {
+        "en_US": "Wake the deck after suspend"
+    },
+    "tags": ["Utility"],
+    "minimum-app-version": "1.5.0",
+    "app-version": "1.5.0-beta"
+}
