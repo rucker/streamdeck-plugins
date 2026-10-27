@@ -1,10 +1,10 @@
 {
-	"Name": "Claude Sessions",
+	"Name": "Agent Sessions",
 	"Version": "0.1.0.0",
 	"Author": "Rick Ucker",
-	"Description": "Shows which Claude Code sessions are working, finished, or waiting for approval, and jumps to the session's tmux pane in iTerm2 on press.",
+	"Description": "Shows which coding agent sessions (Claude Code, GitHub Copilot, Grok) are working, finished, or waiting for approval, and jumps to the session's tmux pane in iTerm2 on press.",
 	"UUID": "com.rucker.claude-sessions",
-	"Category": "Claude Sessions",
+	"Category": "Agent Sessions",
 	"CategoryIcon": "imgs/spark-white",
 	"Icon": "imgs/plugin",
 	"CodePath": "bin/plugin.js",
@@ -35,7 +35,7 @@
 			"Name": "Session Slot",
 			"UUID": "com.rucker.claude-sessions.slot",
 			"Icon": "imgs/spark-white",
-			"Tooltip": "One Claude session per key or dial. Press to jump to it; hold to approve a pending permission.",
+			"Tooltip": "One agent session per key or dial. Press to jump to it; hold to approve a pending permission.",
 			"PropertyInspectorPath": "ui/session-slot.html",
 			"Controllers": ["Keypad", "Encoder"],
 			"Encoder": {
@@ -56,7 +56,7 @@
 			"Name": "Next Waiting Session",
 			"UUID": "com.rucker.claude-sessions.next-waiting",
 			"Icon": "imgs/spark-white",
-			"Tooltip": "How many Claude sessions need you. Press to jump to the one that has waited longest.",
+			"Tooltip": "How many agent sessions need you. Press to jump to the one that has waited longest.",
 			"Controllers": ["Keypad", "Encoder"],
 			"Encoder": {
 				"layout": "layouts/canvas.json",
@@ -76,7 +76,7 @@
 			"Name": "Session Picker",
 			"UUID": "com.rucker.claude-sessions.dial",
 			"Icon": "imgs/spark-white",
-			"Tooltip": "Turn to pick a Claude session, press or tap to jump, hold to approve.",
+			"Tooltip": "Turn to pick an agent session, press or tap to jump, hold to approve.",
 			"Controllers": ["Encoder"],
 			"Encoder": {
 				"layout": "layouts/canvas.json",

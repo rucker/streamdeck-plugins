@@ -1,9 +1,9 @@
 """
-Claude Sessions - StreamController plugin
+Agent Sessions - StreamController plugin
 
-Shows the state of every running Claude Code session (working / your turn /
-needs approval) and jumps to its tmux pane on press. State comes from the
-Claude Code hook in ../hooks/claude_deck_hook.py.
+Shows the state of every running agent session (Claude Code, Copilot, Grok:
+working / your turn / needs approval) and jumps to its tmux pane on press.
+State comes from the agent hook in ../hooks/claude_deck_hook.py.
 """
 
 from src.backend.DeckManagement.InputIdentifier import Input
@@ -64,7 +64,7 @@ class ClaudeSessionsPlugin(PluginBase):
         ))
 
         self.register(
-            plugin_name="Claude Sessions",
+            plugin_name="Agent Sessions",
             plugin_version="0.1.0",
             app_version="1.5.0-beta",
         )

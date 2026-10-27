@@ -1,7 +1,7 @@
 """
-Claude Sessions actions:
+Agent Sessions actions:
 
-- SessionSlot:  shows the Nth active Claude session; press to jump to it.
+- SessionSlot:  shows the Nth active agent session; press to jump to it.
 - NextWaiting:  shows how many sessions need you; press to jump to the one
                 that has waited longest (permission prompts first).
 - SessionDial:  Stream Deck+ dial; turn to pick a session, press/tap to jump.
@@ -20,8 +20,8 @@ from gi.repository import Adw
 from src.backend.DeckManagement.InputIdentifier import Input
 from src.backend.PluginManager.ActionBase import ActionBase
 
-from .logo import CLAUDE_CREAM, logo
-from .sessions import DONE, IDLE, PERMISSION, UNKNOWN, WORKING
+from .logo import CLAUDE_CREAM, agent_badge, logo
+from .sessions import CLAUDE, DONE, IDLE, PERMISSION, UNKNOWN, WORKING
 from .usage import humanize_until, meter_image, read_usage
 
 COLORS = {
@@ -59,11 +59,6 @@ LOGO_EMPTY = Logo(size=0.55, valign=0.0, opacity=0.25)
 def logo_header(on_color: bool) -> Logo:
     """Small logo at the top; cream on orange/red keys, where orange would vanish."""
     return Logo(size=0.4, valign=-0.9, tint=CLAUDE_CREAM if on_color else None)
-
-
-def logo_corner(on_color: bool) -> Logo:
-    """Small mark in the bottom-right corner of session keys."""
-    return Logo(size=0.24, valign=0.92, halign=0.92, tint=CLAUDE_CREAM if on_color else None)
 
 # Short press jumps; a long press (hold-time, 0.5s by default) approves. Jumping
 # fires on a short release so that a long press doesn't also jump.
@@ -108,7 +103,7 @@ def wrap(text: str, width: int, lines: int) -> str:
     return "\n".join(wrapped)
 
 
-class ClaudeAction(ActionBase):
+class AgentAction(ActionBase):
     """Shared rendering: only pushes to the deck when what's shown changes."""
 
     def __init__(self, *args, **kwargs):
@@ -143,8 +138,8 @@ class ClaudeAction(ActionBase):
         self.store.approve(session, on_done=done)
 
     def show(self, top: str, center: str, bottom: str, color: list[int], center_size: int = 14,
-             logo_style: Logo | None = None):
-        frame = (top, center, bottom, tuple(color), center_size, logo_style)
+             logo_style: Logo | None = None, agent: str | None = None):
+        frame = (top, center, bottom, tuple(color), center_size, logo_style, agent)
         if frame == self._shown or not self.get_is_present():
             return
         self._shown = frame
@@ -152,7 +147,10 @@ class ClaudeAction(ActionBase):
         self.set_center_label(center, font_size=center_size, update=False, **OUTLINE)
         self.set_bottom_label(bottom, font_size=11, update=False, **OUTLINE)
         self.set_background_color(color, update=False)
-        if logo_style:
+        # Session keys: the agent's logo in a corner badge.
+        if agent and (badge := agent_badge(agent)):
+            self.set_media(image=badge, size=0.26, valign=0.92, halign=0.92, update=False)
+        elif logo_style:
             self.set_media(image=logo(logo_style.opacity, logo_style.tint), size=logo_style.size,
                            valign=logo_style.valign, halign=logo_style.halign, update=False)
         else:
@@ -175,11 +173,11 @@ class ClaudeAction(ActionBase):
             # No pulsing for the session you're already looking at.
             color=state_color(state, blink=not self.store.is_watched(session)),
             center_size=center_size,
-            logo_style=logo_corner(on_color=state in (DONE, PERMISSION)),
+            agent=session.get("agent", CLAUDE),
         )
 
 
-class SessionSlot(ClaudeAction):
+class SessionSlot(AgentAction):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.has_configuration = True
@@ -236,7 +234,7 @@ class SessionSlot(ClaudeAction):
         self.refresh()
 
 
-class NextWaiting(ClaudeAction):
+class NextWaiting(AgentAction):
     def refresh(self):
         sessions = self.store.sessions()
         waiting = [s for s in sessions if self.store.needs_attention(s)]
@@ -262,7 +260,7 @@ class NextWaiting(ClaudeAction):
             self.store.jump_to(target)
 
 
-class SessionDial(ClaudeAction):
+class SessionDial(AgentAction):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.selected_id: str | None = None
@@ -298,7 +296,7 @@ class SessionDial(ClaudeAction):
             self.approve(sessions[index])
 
 
-class UsageMeter(ClaudeAction):
+class UsageMeter(AgentAction):
     def image_size(self) -> tuple[int, int]:
         if isinstance(self.input_ident, Input.Dial):
             try:

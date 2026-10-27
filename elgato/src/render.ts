@@ -3,9 +3,9 @@
  * how the StreamController plugin lays out its labels and logo.
  */
 
-import { existsSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { humanizeUntil, usageColor, type UsageWindow } from "./usage";
 
@@ -13,13 +13,6 @@ export const CLAUDE_ORANGE: RGB = [217, 119, 87];
 export const CLAUDE_CREAM: RGB = [250, 249, 245];
 
 export type RGB = [number, number, number];
-
-/**
- * If you'd rather use the official Claude logo, put a PNG here; it's used
- * instead of the drawn spark. It deliberately lives outside the repo so the
- * trademark isn't redistributed. (It isn't recolored on orange/red keys.)
- */
-const USER_LOGO_PATH = join(homedir(), ".local", "share", "claude-deck", "logo.png");
 
 // Ray lengths (fraction of the radius), deliberately uneven so it reads as a
 // hand-drawn spark rather than a mechanical asterisk. Same as logo.py.
@@ -43,11 +36,6 @@ export function logoHeader(onColor: boolean): Logo {
 	return { size: 0.36, valign: -0.96, tint: onColor ? CLAUDE_CREAM : undefined };
 }
 
-/** Small mark in the bottom-right corner of session keys. */
-export function logoCorner(onColor: boolean): Logo {
-	return { size: 0.24, valign: 0.92, halign: 0.92, tint: onColor ? CLAUDE_CREAM : undefined };
-}
-
 export type Frame = {
 	top: string;
 	center: string;
@@ -55,6 +43,7 @@ export type Frame = {
 	color: RGB | null; // null = black (empty)
 	centerSize?: number; // in StreamController's key-label points (14 = normal)
 	logo?: Logo;
+	agent?: string; // session keys: that agent's logo in a corner badge
 };
 
 /** The spark in a 100×100 box: blunt, slightly tapered rays with round caps. */
@@ -80,19 +69,25 @@ function spark(fill: string): string {
 	return `<g fill="${fill}">${parts.join("")}<circle cx="${c}" cy="${c}" r="10"/></g>`;
 }
 
-let userLogo: string | null | undefined;
+const AGENT_LOGOS = fileURLToPath(new URL("../imgs/agents/", import.meta.url));
+const agentLogos = new Map<string, string | null>();
 
-function userLogoDataUrl(): string | null {
-	if (userLogo === undefined) {
+/** An agent's logo (imgs/agents/<agent>.svg) as markup for a 24×24 box, or null if there's none. */
+function agentLogo(agent: string): string | null {
+	if (!agentLogos.has(agent)) {
+		let body: string | null = null;
 		try {
-			userLogo = existsSync(USER_LOGO_PATH)
-				? `data:image/png;base64,${readFileSync(USER_LOGO_PATH).toString("base64")}`
-				: null;
+			const svg = readFileSync(join(AGENT_LOGOS, `${agent}.svg`), "utf8");
+			const fill = /fill="([^"]+)"/.exec(svg)?.[1] ?? "black";
+			const rule = /fill-rule="([^"]+)"/.exec(svg)?.[1] ?? "nonzero";
+			const paths = [...svg.matchAll(/<path d="([^"]+)"/g)].map((m) => `<path d="${m[1]}"/>`).join("");
+			body = paths ? `<g fill="${fill}" fill-rule="${rule}">${paths}</g>` : null;
 		} catch {
-			userLogo = null; // unreadable; fall back to the drawn spark
+			body = null; // unknown agent; no badge
 		}
+		agentLogos.set(agent, body);
 	}
-	return userLogo;
+	return agentLogos.get(agent) ?? null;
 }
 
 function rgb([r, g, b]: RGB): string {
@@ -109,11 +104,22 @@ function placeLogo(logo: Logo, width: number, height: number): string {
 	const x = ((width - size) * ((logo.halign ?? 0) + 1)) / 2;
 	const y = ((height - size) * (logo.valign + 1)) / 2;
 	const opacity = logo.opacity ?? 1;
-	const user = userLogoDataUrl();
-	const body = user
-		? `<image href="${user}" width="100" height="100" preserveAspectRatio="xMidYMid meet"/>`
-		: spark(rgb(logo.tint ?? CLAUDE_ORANGE));
-	return `<g transform="translate(${x.toFixed(1)},${y.toFixed(1)}) scale(${(size / 100).toFixed(4)})" opacity="${opacity}">${body}</g>`;
+	return `<g transform="translate(${x.toFixed(1)},${y.toFixed(1)}) scale(${(size / 100).toFixed(4)})" opacity="${opacity}">${spark(rgb(logo.tint ?? CLAUDE_ORANGE))}</g>`;
+}
+
+/**
+ * The agent's logo on a white disc in the bottom-right corner. The disc keeps
+ * every logo legible, unaltered, on any key color.
+ */
+function placeBadge(agent: string, width: number, height: number): string {
+	const body = agentLogo(agent);
+	if (!body) return "";
+	const size = 0.26 * height;
+	const inset = 0.04 * height;
+	const [cx, cy] = [width - inset - size / 2, height - inset - size / 2];
+	const logoSize = size * 0.64;
+	const at = `translate(${(cx - logoSize / 2).toFixed(1)},${(cy - logoSize / 2).toFixed(1)}) scale(${(logoSize / 24).toFixed(4)})`;
+	return `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${(size / 2).toFixed(1)}" fill="white"/><g transform="${at}">${body}</g>`;
 }
 
 /**
@@ -142,6 +148,7 @@ function svg(width: number, height: number, frame: Frame, scale: number): string
 	const body = [
 		`<rect width="${width}" height="${height}" fill="${background}"/>`,
 		frame.logo ? placeLogo(frame.logo, width, height) : "",
+		frame.agent ? placeBadge(frame.agent, width, height) : "",
 		label(frame.top, width / 2, height * 0.18, 12 * scale),
 		label(frame.center, width / 2, height * 0.52, center),
 		label(frame.bottom, width / 2, height * 0.86, 11 * scale),

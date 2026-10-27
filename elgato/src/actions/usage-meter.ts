@@ -3,11 +3,11 @@ import type { JsonObject } from "@elgato/utils";
 
 import { type Frame, LOGO_EMPTY, meterKeyImage, meterStripImage } from "../render";
 import { humanizeUntil, readUsage } from "../usage";
-import { ClaudeAction } from "./base";
+import { AgentAction } from "./base";
 
 /** Your plan's 5-hour and weekly usage, with the time until each resets. */
 @action({ UUID: "com.rucker.claude-sessions.usage" })
-export class UsageMeter extends ClaudeAction {
+export class UsageMeter extends AgentAction {
 	protected frameFor(_action: Action<JsonObject>): Frame {
 		return { top: "", center: "No usage\nyet", bottom: "", color: null, centerSize: 11, logo: LOGO_EMPTY };
 	}

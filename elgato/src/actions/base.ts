@@ -12,8 +12,8 @@ import {
 } from "@elgato/streamdeck";
 import type { JsonObject } from "@elgato/utils";
 
-import { type Frame, keyImage, logoCorner, LOGO_EMPTY, type RGB, stripImage } from "../render";
-import { DONE, IDLE, PERMISSION, type Session, SessionStore, store, UNKNOWN, WORKING } from "../sessions";
+import { type Frame, keyImage, LOGO_EMPTY, type RGB, stripImage } from "../render";
+import { CLAUDE, DONE, IDLE, PERMISSION, type Session, SessionStore, store, UNKNOWN, WORKING } from "../sessions";
 
 export const COLORS: Record<string, RGB> = {
 	[WORKING]: [37, 84, 160],
@@ -79,7 +79,7 @@ export function wrap(text: string, width: number, lines: number): string {
  * Shared behavior: redraws every second (only pushing changes to the deck),
  * and turns key/dial presses into press (on short release) and hold events.
  */
-export abstract class ClaudeAction<T extends JsonObject = JsonObject> extends SingletonAction<T> {
+export abstract class AgentAction<T extends JsonObject = JsonObject> extends SingletonAction<T> {
 	protected store = store;
 	protected settings = new Map<string, T>();
 	protected shown = new Map<string, string>();
@@ -194,7 +194,7 @@ export abstract class ClaudeAction<T extends JsonObject = JsonObject> extends Si
 			// No pulsing for the session you're already looking at.
 			color: stateColor(state, !this.store.isWatched(session)),
 			centerSize,
-			logo: logoCorner(state === DONE || state === PERMISSION),
+			agent: session.agent ?? CLAUDE,
 		};
 	}
 

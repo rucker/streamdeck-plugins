@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """
-Claude Code hook that records each session's state for the Claude Sessions
-StreamController plugin.
+Agent hook that records each session's state for the Agent Sessions deck
+plugins. Claude Code and Grok run it from ~/.claude/settings.json (Grok reads
+Claude's hooks), and GitHub Copilot from ~/.copilot/settings.json with
+`--agent copilot`.
 
 Registered for several hook events (see install.sh). Reads the hook payload
 from stdin and writes ~/.cache/claude-deck/<session_id>.json atomically. It
 must never print to stdout (SessionStart/UserPromptSubmit stdout is injected
-into Claude's context) and must never fail the hook, so every error is
+into the agent's context) and must never fail the hook, so every error is
 swallowed and it always exits 0.
 """
 
@@ -23,8 +25,35 @@ STATE_DIR = os.path.expanduser("~/.cache/claude-deck")
 
 WORKING = "working"
 IDLE = "idle"  # fresh session, nothing asked yet
-DONE = "done"  # Claude finished its turn; your move
+DONE = "done"  # the agent finished its turn; your move
 PERMISSION = "permission"  # blocked on an approval / question
+
+CLAUDE = "claude"
+# Agents whose approval dialog the deck recognizes (see APPROVE_DIALOGS in the front ends).
+APPROVABLE = (CLAUDE, "copilot")
+
+# Events that only update a session the hook already knows about. Grok sends a
+# Stop after SessionEnd, which would otherwise bring the session back.
+UPDATE_ONLY = ("Stop", "Notification")
+
+
+def agent_name() -> str:
+    if "--agent" in sys.argv[1:-1]:
+        return sys.argv[sys.argv.index("--agent") + 1]
+    # Grok runs the same registration as Claude Code, from Claude's settings.
+    if os.environ.get("GROK_HOOK_EVENT"):
+        return "grok"
+    return CLAUDE
+
+
+def normalize(payload: dict) -> dict:
+    """Copilot's PermissionRequest payload is camelCase with no hook_event_name."""
+    if payload.get("hookName") == "permissionRequest":
+        payload.setdefault("hook_event_name", "PermissionRequest")
+    for snake, camel in (("session_id", "sessionId"), ("tool_name", "toolName"), ("tool_input", "toolInput")):
+        if snake not in payload and camel in payload:
+            payload[snake] = payload[camel]
+    return payload
 
 
 def state_for(payload: dict) -> str | None:
@@ -51,9 +80,9 @@ def state_for(payload: dict) -> str | None:
 
 
 def summarize_request(tool: str, tool_input: dict) -> str:
-    """One short line describing what Claude wants to do, for the deck."""
+    """One short line describing what the agent wants to do, for the deck."""
     tool_input = tool_input if isinstance(tool_input, dict) else {}
-    if tool == "Bash":
+    if tool.lower() in ("bash", "run_terminal_command"):
         command = str(tool_input.get("command", "")).strip().splitlines()
         return "$ " + (command[0] if command else "")
     if "file_path" in tool_input or "notebook_path" in tool_input:
@@ -86,7 +115,7 @@ def write_atomic(path: str, data: dict) -> None:
 
 
 def main() -> None:
-    payload = json.load(sys.stdin)
+    payload = normalize(json.load(sys.stdin))
     session_id = payload.get("session_id")
     if not session_id:
         return
@@ -114,18 +143,22 @@ def main() -> None:
         "hook_event_name"
     ) == "Notification":
         new_state = PERMISSION
+    if not record and payload.get("hook_event_name") in UPDATE_ONLY:
+        return
     if new_state is None and record:
         return
 
     now = time.time()
     cwd = payload.get("cwd") or record.get("cwd") or ""
     state = new_state or record.get("state") or IDLE
+    agent = record.get("agent") or agent_name()
 
     record.update(
         {
             "session_id": session_id,
+            "agent": agent,
             "cwd": cwd,
-            # cwd follows Claude around (cd in Bash); keep the label stable.
+            # cwd follows the agent around (cd in a shell); keep the label stable.
             "project": record.get("project") or project_name(cwd),
             "tmux_pane": os.environ.get("TMUX_PANE") or record.get("tmux_pane"),
             "started": record.get("started", now),
@@ -142,8 +175,9 @@ def main() -> None:
         record["request"] = summarize_request(
             str(payload.get("tool_name", "")), payload.get("tool_input")
         )[:120]
-        # Only tool approvals may be approved from the deck.
-        record["request_kind"] = "tool"
+        # Only tool approvals may be approved from the deck, and only for agents
+        # whose dialog the deck can recognize before answering it.
+        record["request_kind"] = "tool" if agent in APPROVABLE else "other"
     elif "request" not in record:
         # Notification-only fallback (e.g. a question rather than a tool call).
         record["request"] = str(payload.get("message", ""))[:120]
@@ -155,6 +189,6 @@ def main() -> None:
 if __name__ == "__main__":
     try:
         main()
-    except Exception:  # noqa: BLE001 - a hook must never break Claude Code
+    except Exception:  # noqa: BLE001 - a hook must never break the agent
         pass
     sys.exit(0)

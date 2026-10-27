@@ -1,8 +1,9 @@
 /**
- * Claude Sessions for Elgato's Stream Deck app (macOS): the counterpart of the
+ * Agent Sessions for Elgato's Stream Deck app (macOS): the counterpart of the
  * StreamController plugin in com_rucker_ClaudeSessions. Shows the state of
- * every running Claude Code session and jumps to its tmux pane in iTerm2.
- * State comes from the Claude Code hook in ../hooks/claude_deck_hook.py.
+ * every running agent session (Claude Code, Copilot, Grok) and jumps to its
+ * tmux pane in iTerm2.
+ * State comes from the agent hook in ../hooks/claude_deck_hook.py.
  */
 
 import streamDeck from "@elgato/streamdeck";

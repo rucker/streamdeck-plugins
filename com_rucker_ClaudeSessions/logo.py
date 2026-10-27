@@ -1,8 +1,7 @@
 """
-The Claude Sessions logo: a spark-style starburst drawn with Pillow, in the
-Claude orange. If you'd rather use the official Claude logo, put a PNG at
-USER_LOGO_PATH; it's used instead. It deliberately lives outside this repo so
-the trademark isn't redistributed with the plugin.
+The plugin's spark-style starburst, drawn with Pillow, and the per-agent
+badges on session keys: each agent's logo (assets/<agent>.png, rendered from
+the SVGs by tools/render_agent_logos.py) on a white disc.
 """
 
 import math
@@ -11,7 +10,7 @@ from functools import lru_cache
 
 from PIL import Image, ImageDraw
 
-USER_LOGO_PATH = os.path.expanduser("~/.local/share/claude-deck/logo.png")
+ASSETS = os.path.join(os.path.dirname(os.path.realpath(__file__)), "assets")
 
 CLAUDE_ORANGE = (217, 119, 87)
 CLAUDE_CREAM = (250, 249, 245)
@@ -56,12 +55,6 @@ def _draw_spark(color: tuple[int, int, int]) -> Image.Image:
 
 @lru_cache(maxsize=None)
 def _base_logo() -> Image.Image:
-    if os.path.isfile(USER_LOGO_PATH):
-        try:
-            with Image.open(USER_LOGO_PATH) as user_logo:
-                return user_logo.convert("RGBA")
-        except OSError:
-            pass  # unreadable; fall back to the drawn spark
     return _draw_spark(CLAUDE_ORANGE)
 
 
@@ -79,3 +72,22 @@ def logo(opacity: float = 1.0, tint: tuple[int, int, int] | None = None) -> Imag
         alpha = alpha.point(lambda a: int(a * opacity))
     image.putalpha(alpha)
     return image
+
+
+@lru_cache(maxsize=None)
+def agent_badge(agent: str) -> Image.Image | None:
+    """
+    The agent's logo on a white disc, which keeps every logo legible, unaltered,
+    on any key color. None for an agent without a logo.
+    """
+    try:
+        with Image.open(os.path.join(ASSETS, f"{agent}.png")) as agent_logo:
+            mark = agent_logo.convert("RGBA")
+    except OSError:
+        return None
+    badge = Image.new("RGBA", (CANVAS, CANVAS), (0, 0, 0, 0))
+    ImageDraw.Draw(badge).ellipse([0, 0, CANVAS - 1, CANVAS - 1], fill=(255, 255, 255, 255))
+    size = round(CANVAS * 0.64)
+    offset = (CANVAS - size) // 2
+    badge.alpha_composite(mark.resize((size, size), Image.LANCZOS), (offset, offset))
+    return badge.resize((OUTPUT, OUTPUT), Image.LANCZOS)

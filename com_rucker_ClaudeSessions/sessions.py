@@ -1,9 +1,10 @@
 """
-Session store and window/tmux plumbing shared by all Claude Sessions actions.
+Session store and window/tmux plumbing shared by all Agent Sessions actions.
 
-The hook (hooks/claude_deck_hook.py at the repo root) writes one JSON file per Claude Code
-session into STATE_DIR. Every action ticks once a second, so reads are cached
-and shared through the plugin's single SessionStore instance.
+The hook (hooks/claude_deck_hook.py at the repo root) writes one JSON file per
+agent session (Claude Code, Copilot or Grok) into STATE_DIR. Every action ticks
+once a second, so reads are cached and shared through the plugin's single
+SessionStore instance.
 """
 
 import json
@@ -22,7 +23,7 @@ WORKING = "working"
 IDLE = "idle"
 DONE = "done"
 PERMISSION = "permission"
-UNKNOWN = "unknown"  # Claude seen in tmux, but no hook has reported yet
+UNKNOWN = "unknown"  # an agent seen in tmux, but no hook has reported yet
 ATTENTION = (PERMISSION, DONE)
 
 TERMINAL_WM_CLASS = "org.gnome.Terminal"
@@ -36,8 +37,18 @@ UNTRACKED_MAX_AGE_SECONDS = 12 * 3600
 
 SHELLS = {"bash", "zsh", "fish", "sh", "dash"}
 
-# Claude Code's tool permission dialog: highlighted "1. Yes" plus the footer.
-APPROVE_DIALOG = re.compile(r"^\s*❯\s*1\.\s*Yes\s*$(?=.*Esc to cancel)", re.MULTILINE | re.DOTALL)
+CLAUDE = "claude"
+
+# Each agent's tool permission dialog with "1. Yes" highlighted. "1" answers it
+# in both. Copilot's sits in a box, and its folder-trust question ("Do you trust
+# the files…") must not match.
+APPROVE_DIALOGS = {
+    "claude": re.compile(r"^\s*❯\s*1\.\s*Yes\s*$(?=.*Esc to cancel)", re.MULTILINE | re.DOTALL),
+    "copilot": re.compile(
+        r"Do you want to [^\n]*\?[\s│]*❯ 1\. Yes[ │]*$(?=.*↑/↓ to navigate · enter to select · esc to cancel)",
+        re.MULTILINE | re.DOTALL,
+    ),
+}
 
 
 def is_in_flatpak() -> bool:
@@ -63,6 +74,16 @@ def project_name(cwd: str) -> str:
     return os.path.basename(os.path.normpath(cwd))
 
 
+def pane_agent(command: str) -> str | None:
+    """The agent running in a tmux pane, from #{pane_current_command}."""
+    # Claude Code can show up as its version (its process title), e.g. "2.1.311".
+    if command == CLAUDE or re.fullmatch(r"\d+\.\d+\.\d+", command):
+        return CLAUDE
+    # Grok's binary is named per platform, e.g. "grok-macos-aarch64" (tmux cuts it short).
+    if command == "grok" or command.startswith("grok-"):
+        return "grok"
+    return "copilot" if command == "copilot" else None
+
 
 class SessionStore:
     def __init__(self):
@@ -74,11 +95,11 @@ class SessionStore:
         self.focused_pane: str | None = None
         # pane_id -> sort key from its tmux position (session, window, pane).
         self.pane_order: dict[str, tuple] = {}
-        # pane_id -> cwd for every tmux pane running claude, hooked or not.
-        self.claude_panes: dict[str, str] = {}
+        # pane_id -> (agent, cwd) for every tmux pane running an agent, hooked or not.
+        self.agent_panes: dict[str, tuple[str, str]] = {}
         self._stop = threading.Event()
-        threading.Thread(target=self._prune_loop, daemon=True, name="ClaudeSessions-prune").start()
-        threading.Thread(target=self._tmux_loop, daemon=True, name="ClaudeSessions-tmux").start()
+        threading.Thread(target=self._prune_loop, daemon=True, name="AgentSessions-prune").start()
+        threading.Thread(target=self._tmux_loop, daemon=True, name="AgentSessions-tmux").start()
 
     def stop(self):
         self._stop.set()
@@ -106,15 +127,15 @@ class SessionStore:
 
     def _unhooked_sessions(self, hooked: list[dict]) -> list[dict]:
         """
-        Placeholders for Claude panes with no state file yet, e.g. sessions
+        Placeholders for agent panes with no state file yet, e.g. sessions
         started before the hooks were installed that haven't fired one since.
         Replaced by the real record as soon as that session triggers a hook.
         """
         known = {s.get("tmux_pane") for s in hooked}
         return [
-            {"session_id": f"tmux:{pane}", "tmux_pane": pane, "project": project_name(path),
-             "state": UNKNOWN, "started": 0}
-            for pane, path in self.claude_panes.items() if pane not in known
+            {"session_id": f"tmux:{pane}", "agent": agent, "tmux_pane": pane,
+             "project": project_name(path), "state": UNKNOWN, "started": 0}
+            for pane, (agent, path) in self.agent_panes.items() if pane not in known
         ]
 
     def _read_all(self) -> list[dict]:
@@ -162,7 +183,7 @@ class SessionStore:
     def _tmux_loop(self):
         while not self._stop.wait(TMUX_INTERVAL_SECONDS):
             try:
-                self.pane_order, self.claude_panes = self._read_tmux_panes()
+                self.pane_order, self.agent_panes = self._read_tmux_panes()
             except Exception:  # noqa: BLE001 - keep the last known layout
                 pass
             try:
@@ -171,8 +192,8 @@ class SessionStore:
                 self.focused_pane = None
 
     @staticmethod
-    def _read_tmux_panes() -> tuple[dict[str, tuple], dict[str, str]]:
-        """Returns (pane_id -> sort key, pane_id -> cwd for panes running claude)."""
+    def _read_tmux_panes() -> tuple[dict[str, tuple], dict[str, tuple[str, str]]]:
+        """Returns (pane_id -> sort key, pane_id -> (agent, cwd) for panes running an agent)."""
         result = run_host(["tmux", "list-panes", "-a", "-F", "\t".join([
             "#{pane_id}", "#{session_name}", "#{window_index}", "#{pane_index}",
             "#{pane_current_command}", "#{pane_current_path}",
@@ -184,13 +205,13 @@ class SessionStore:
             # Session "10" sorts after "2", like tmux's own ordering.
             return (0, int(name), "") if name.isdigit() else (1, 0, name)
 
-        order, claude_panes = {}, {}
+        order, agent_panes = {}, {}
         for line in result.stdout.splitlines():
             pane_id, session, window, pane, command, path = line.split("\t", 5)
             order[pane_id] = (natural(session), int(window), int(pane))
-            if command == "claude":
-                claude_panes[pane_id] = path
-        return order, claude_panes
+            if agent := pane_agent(command):
+                agent_panes[pane_id] = (agent, path)
+        return order, agent_panes
 
     def _read_focused_pane(self) -> str | None:
         if not any(w.get("focus") for w in self._terminal_windows()):
@@ -202,7 +223,7 @@ class SessionStore:
         return result.stdout.strip() or None
 
     # ------------------------------------------------------------------ #
-    # Pruning sessions whose Claude process is gone
+    # Pruning sessions whose agent process is gone
     # ------------------------------------------------------------------ #
 
     def _prune_loop(self):
@@ -210,7 +231,7 @@ class SessionStore:
             try:
                 self._prune_once()
             except Exception as e:  # noqa: BLE001
-                log.warning(f"[ClaudeSessions] prune failed: {e}")
+                log.warning(f"[AgentSessions] prune failed: {e}")
 
     def _prune_once(self):
         result = run_host(["tmux", "list-panes", "-a", "-F", "#{pane_id} #{pane_current_command}"])
@@ -226,7 +247,7 @@ class SessionStore:
         for session in self._read_all():
             pane = session.get("tmux_pane")
             if pane and tmux_ok:
-                # Pane closed, or Claude exited back to the shell without SessionEnd.
+                # Pane closed, or the agent exited back to the shell without SessionEnd.
                 dead = pane not in panes or panes[pane] in SHELLS
             else:
                 dead = now - session.get("updated", now) > UNTRACKED_MAX_AGE_SECONDS
@@ -265,11 +286,11 @@ class SessionStore:
                  "select-pane", "-t", pane]
             )
             if result.returncode != 0:
-                log.warning(f"[ClaudeSessions] tmux jump to {pane} failed: {result.stderr.strip()}")
+                log.warning(f"[AgentSessions] tmux jump to {pane} failed: {result.stderr.strip()}")
         try:
             self._activate_terminal()
         except Exception as e:  # noqa: BLE001
-            log.warning(f"[ClaudeSessions] could not raise terminal (is Window Calls enabled?): {e}")
+            log.warning(f"[AgentSessions] could not raise terminal (is Window Calls enabled?): {e}")
 
     # ------------------------------------------------------------------ #
     # Approving a permission prompt
@@ -290,7 +311,7 @@ class SessionStore:
             try:
                 ok = self._approve(session)
             except Exception as e:  # noqa: BLE001
-                log.warning(f"[ClaudeSessions] approve failed: {e}")
+                log.warning(f"[AgentSessions] approve failed: {e}")
             if on_done:
                 GLib.idle_add(on_done, ok)
 
@@ -303,8 +324,9 @@ class SessionStore:
         # Check the dialog is really on screen: it may have been answered in the
         # terminal already, and a stray "1" would land in the prompt instead.
         screen = run_host(["tmux", "capture-pane", "-p", "-t", pane])
-        if screen.returncode != 0 or not APPROVE_DIALOG.search(screen.stdout):
-            log.info(f"[ClaudeSessions] no approval dialog visible in {pane}; not sending")
+        dialog = APPROVE_DIALOGS.get(session.get("agent", CLAUDE))
+        if screen.returncode != 0 or not dialog or not dialog.search(screen.stdout):
+            log.info(f"[AgentSessions] no approval dialog visible in {pane}; not sending")
             return False
         return run_host(["tmux", "send-keys", "-t", pane, "1"]).returncode == 0
 

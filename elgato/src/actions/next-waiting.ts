@@ -3,14 +3,14 @@ import type { JsonObject } from "@elgato/utils";
 
 import { type Frame, logoHeader } from "../render";
 import { IDLE } from "../sessions";
-import { COLORS, ClaudeAction, stateColor, truncate } from "./base";
+import { COLORS, AgentAction, stateColor, truncate } from "./base";
 
 /**
  * Shows how many sessions need you; press to jump to the one that has waited
  * longest (permission prompts first).
  */
 @action({ UUID: "com.rucker.claude-sessions.next-waiting" })
-export class NextWaiting extends ClaudeAction {
+export class NextWaiting extends AgentAction {
 	protected frameFor(_action: Action<JsonObject>): Frame {
 		const sessions = this.store.sessions();
 		const waiting = sessions.filter((s) => this.store.needsAttention(s));

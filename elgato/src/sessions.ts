@@ -1,10 +1,11 @@
 /**
- * Session store and tmux/iTerm2 plumbing shared by all Claude Sessions actions;
+ * Session store and tmux/iTerm2 plumbing shared by all Agent Sessions actions;
  * the macOS counterpart of com_rucker_ClaudeSessions/sessions.py.
  *
  * The hook (hooks/claude_deck_hook.py at the repo root) writes one JSON file
- * per Claude Code session into STATE_DIR. Every action redraws once a second,
- * so reads are cached and shared through a single SessionStore.
+ * per agent session (Claude Code, Copilot or Grok) into STATE_DIR. Every
+ * action redraws once a second, so reads are cached and shared through a
+ * single SessionStore.
  */
 
 import { execFile } from "node:child_process";
@@ -20,7 +21,7 @@ export const WORKING = "working";
 export const IDLE = "idle";
 export const DONE = "done";
 export const PERMISSION = "permission";
-export const UNKNOWN = "unknown"; // Claude seen in tmux, but no hook has reported yet
+export const UNKNOWN = "unknown"; // an agent seen in tmux, but no hook has reported yet
 const ATTENTION = [PERMISSION, DONE];
 
 const TERMINAL_BUNDLE_ID = "com.googlecode.iterm2";
@@ -34,17 +35,36 @@ const UNTRACKED_MAX_AGE_SECONDS = 12 * 3600;
 
 const SHELLS = new Set(["bash", "zsh", "fish", "sh", "dash"]);
 
-// Claude Code's tool permission dialog: highlighted "1. Yes" plus the footer.
-const APPROVE_DIALOG = /^\s*❯\s*1\.\s*Yes\s*$(?=[\s\S]*Esc to cancel)/m;
+export const CLAUDE = "claude";
 
-// The Stream Deck app starts plugins with a minimal PATH, which misses Homebrew.
+/** The agent running in a tmux pane, from #{pane_current_command}. */
+function paneAgent(command: string): string | null {
+	// Claude Code sets its process title to its version, e.g. "2.1.311".
+	if (command === CLAUDE || /^\d+\.\d+\.\d+$/.test(command)) return CLAUDE;
+	// Grok's binary is named per platform, e.g. "grok-macos-aarch64" (tmux cuts it short).
+	if (command === "grok" || command.startsWith("grok-")) return "grok";
+	return command === "copilot" ? command : null;
+}
+
+// Each agent's tool permission dialog with "1. Yes" highlighted. "1" answers it
+// in both. Copilot's sits in a box, and its folder-trust question ("Do you trust
+// the files…") must not match.
+const APPROVE_DIALOGS: Record<string, RegExp> = {
+	claude: /^\s*❯\s*1\.\s*Yes\s*$(?=[\s\S]*Esc to cancel)/m,
+	copilot: /Do you want to [^\n]*\?[\s│]*❯ 1\. Yes[ │]*$(?=[\s\S]*↑\/↓ to navigate · enter to select · esc to cancel)/m,
+};
+
+// The Stream Deck app starts plugins with a minimal PATH, which misses Homebrew,
+// and no locale, under which tmux prints the tabs in our -F formats as "_".
 const ENV = {
 	...process.env,
 	PATH: ["/opt/homebrew/bin", "/usr/local/bin", process.env.PATH ?? "/usr/bin:/bin"].join(":"),
+	LANG: process.env.LANG || "en_US.UTF-8",
 };
 
 export type Session = {
 	session_id: string;
+	agent?: string; // claude (the default), copilot or grok
 	cwd?: string;
 	project?: string;
 	tmux_pane?: string | null;
@@ -93,8 +113,8 @@ export class SessionStore {
 	focusedPane: string | null = null;
 	/** pane_id -> its tmux position. */
 	private paneOrder = new Map<string, PaneOrder>();
-	/** pane_id -> cwd for every tmux pane running claude, hooked or not. */
-	private claudePanes = new Map<string, string>();
+	/** pane_id -> agent and cwd for every tmux pane running an agent, hooked or not. */
+	private agentPanes = new Map<string, { agent: string; path: string }>();
 
 	constructor() {
 		this.loop(TMUX_INTERVAL_MS, () => this.trackTmux());
@@ -107,7 +127,7 @@ export class SessionStore {
 			try {
 				await work();
 			} catch (e) {
-				streamDeck.logger.warn(`[ClaudeSessions] background task failed: ${e}`);
+				streamDeck.logger.warn(`[AgentSessions] background task failed: ${e}`);
 			}
 			setTimeout(tick, intervalMs);
 		};
@@ -139,16 +159,17 @@ export class SessionStore {
 	}
 
 	/**
-	 * Placeholders for Claude panes with no state file yet, e.g. sessions
+	 * Placeholders for agent panes with no state file yet, e.g. sessions
 	 * started before the hooks were installed that haven't fired one since.
 	 * Replaced by the real record as soon as that session triggers a hook.
 	 */
 	private unhookedSessions(hooked: Session[]): Session[] {
 		const known = new Set(hooked.map((s) => s.tmux_pane));
-		return [...this.claudePanes]
+		return [...this.agentPanes]
 			.filter(([pane]) => !known.has(pane))
-			.map(([pane, path]) => ({
+			.map(([pane, { agent, path }]) => ({
 				session_id: `tmux:${pane}`,
+				agent,
 				tmux_pane: pane,
 				project: projectName(path),
 				state: UNKNOWN,
@@ -220,22 +241,23 @@ export class SessionStore {
 		]);
 		if (!result.ok) {
 			this.paneOrder = new Map();
-			this.claudePanes = new Map();
+			this.agentPanes = new Map();
 			return;
 		}
 		const order = new Map<string, PaneOrder>();
-		const claude = new Map<string, string>();
+		const agents = new Map<string, { agent: string; path: string }>();
 		for (const line of result.stdout.split("\n")) {
-			if (!line) continue;
 			const [paneId, session, window, pane, command, ...path] = line.split("\t");
+			if (command === undefined) continue;
 			// Session "10" sorts after "2", like tmux's own ordering.
 			const numeric = /^\d+$/.test(session);
 			order.set(paneId, [numeric ? 0 : 1, numeric ? Number(session) : 0, numeric ? "" : session,
 				Number(window), Number(pane)]);
-			if (command === "claude") claude.set(paneId, path.join("\t"));
+			const agent = paneAgent(command);
+			if (agent) agents.set(paneId, { agent, path: path.join("\t") });
 		}
 		this.paneOrder = order;
-		this.claudePanes = claude;
+		this.agentPanes = agents;
 	}
 
 	private async readFocusedPane(): Promise<string | null> {
@@ -254,7 +276,7 @@ export class SessionStore {
 	}
 
 	// ------------------------------------------------------------------ //
-	// Pruning sessions whose Claude process is gone
+	// Pruning sessions whose agent process is gone
 	// ------------------------------------------------------------------ //
 
 	private async pruneOnce(): Promise<void> {
@@ -272,7 +294,7 @@ export class SessionStore {
 		for (const session of this.readAll()) {
 			const pane = session.tmux_pane;
 			const dead = pane && result.ok
-				// Pane closed, or Claude exited back to the shell without SessionEnd.
+				// Pane closed, or the agent exited back to the shell without SessionEnd.
 				? !panes.has(pane) || SHELLS.has(panes.get(pane) ?? "")
 				: now - (session.updated ?? now) > UNTRACKED_MAX_AGE_SECONDS;
 			if (!dead) continue;
@@ -311,12 +333,12 @@ export class SessionStore {
 				"select-pane", "-t", pane,
 			]);
 			if (!result.ok) {
-				streamDeck.logger.warn(`[ClaudeSessions] tmux jump to ${pane} failed: ${result.stderr.trim()}`);
+				streamDeck.logger.warn(`[AgentSessions] tmux jump to ${pane} failed: ${result.stderr.trim()}`);
 			}
 		}
 		const raised = await run("open", ["-b", TERMINAL_BUNDLE_ID]);
 		if (!raised.ok) {
-			streamDeck.logger.warn(`[ClaudeSessions] could not raise iTerm2: ${raised.stderr.trim()}`);
+			streamDeck.logger.warn(`[AgentSessions] could not raise iTerm2: ${raised.stderr.trim()}`);
 		}
 	}
 
@@ -335,8 +357,9 @@ export class SessionStore {
 		// Check the dialog is really on screen: it may have been answered in the
 		// terminal already, and a stray "1" would land in the prompt instead.
 		const screen = await run("tmux", ["capture-pane", "-p", "-t", pane]);
-		if (!screen.ok || !APPROVE_DIALOG.test(screen.stdout)) {
-			streamDeck.logger.info(`[ClaudeSessions] no approval dialog visible in ${pane}; not sending`);
+		const dialog = APPROVE_DIALOGS[session.agent ?? CLAUDE];
+		if (!screen.ok || !dialog?.test(screen.stdout)) {
+			streamDeck.logger.info(`[AgentSessions] no approval dialog visible in ${pane}; not sending`);
 			return false;
 		}
 		return (await run("tmux", ["send-keys", "-t", pane, "1"])).ok;

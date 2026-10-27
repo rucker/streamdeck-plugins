@@ -2,7 +2,7 @@ import { type Action, action } from "@elgato/streamdeck";
 
 import { type Frame } from "../render";
 import { type Session } from "../sessions";
-import { ClaudeAction } from "./base";
+import { AgentAction } from "./base";
 
 type SlotSettings = {
 	slot?: number | string; // the settings dropdown stores strings
@@ -27,9 +27,9 @@ function compare(a: number[], b: number[]): number {
 	return 0;
 }
 
-/** Shows the Nth active Claude session; press to jump, hold to approve. */
+/** Shows the Nth active agent session; press to jump, hold to approve. */
 @action({ UUID: "com.rucker.claude-sessions.slot" })
-export class SessionSlot extends ClaudeAction<SlotSettings> {
+export class SessionSlot extends AgentAction<SlotSettings> {
 	/** Manual slot number, or 0 for automatic (numbered by position on the page). */
 	private slot(action: Action<SlotSettings>): number {
 		return Number(this.settings.get(action.id)?.slot ?? 0) || 0;
