@@ -22,6 +22,14 @@
 		"Version": "24",
 		"Debug": "enabled"
 	},
+	"Profiles": [
+		{
+			"Name": "profiles/claude-sessions",
+			"DeviceType": 7,
+			"Readonly": false,
+			"DontAutoSwitchWhenInstalled": true
+		}
+	],
 	"Actions": [
 		{
 			"Name": "Session Slot",

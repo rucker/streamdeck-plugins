@@ -4,7 +4,8 @@
 #   Linux: symlinks every com_rucker_* plugin into StreamController's (Flatpak)
 #          plugin dir.
 #   macOS: builds the Elgato Stream Deck plugin and links it into the Stream
-#          Deck app (needs Node 20+ and Elgato's CLI: npm i -g @elgato/cli).
+#          Deck app (needs Node 20+ and Elgato's CLI: npm i -g @elgato/cli),
+#          and imports its ready-made Stream Deck+ profile if it isn't there yet.
 #   Both:  registers hooks/claude_deck_hook.py in ~/.claude/settings.json
 #          (idempotent; replaces entries pointing at an old copy; backs up first),
 #          and hooks/claude_deck_statusline.py as the status line (feeds the
@@ -35,6 +36,13 @@ Darwin)
         next="Restart the Stream Deck app (streamdeck restart com.rucker.claude-sessions)."
     else
         next="Install Elgato's CLI (npm i -g @elgato/cli), then: streamdeck link $elgato/com.rucker.claude-sessions.sdPlugin"
+    fi
+    # A linked plugin doesn't get its bundled profile installed, so import it,
+    # once: the app adds a new copy on every import.
+    profiles="$HOME/Library/Application Support/com.elgato.StreamDeck/ProfilesV3"
+    if ! grep -qs '"Name":"Claude Sessions"' "$profiles"/*.sdProfile/manifest.json; then
+        open "$elgato/com.rucker.claude-sessions.sdPlugin/profiles/claude-sessions.streamDeckProfile"
+        echo "Imported the Claude Sessions profile into the Stream Deck app"
     fi
     ;;
 *)

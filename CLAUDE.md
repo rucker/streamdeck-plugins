@@ -68,6 +68,7 @@ Behaviors that are easy to break:
   - Text outlines are drawn as a stroked copy under the fill, because `paint-order` support in the app's SVG renderer isn't guaranteed.
 - **Press and hold:** the SDK has no hold event. `base.ts` times key/dial down→up (500ms = hold = approve; a short release = jump). Touch taps use the payload's `hold` flag.
 - **Slot setting:** a `<sdpi-select>` in `ui/session-slot.html`, stored as a string. Always parse it with `Number(...)`.
+- **Bundled profile:** `scripts/profile.py` writes `profiles/claude-sessions.streamDeckProfile` (Stream Deck+ only) as part of `npm run build`. The app installs bundled profiles only for packaged plugins, not linked ones, so `install.sh` imports it with `open`, once.
 - **Optional user logo:** a PNG at `~/.local/share/claude-deck/logo.png` replaces the spark. It's kept out of the repo on purpose (trademark), and isn't recolored.
 
 ## Linux specifics
@@ -79,8 +80,13 @@ Behaviors that are easy to break:
 ## Status
 
 - Linux: all three plugins are in daily use and confirmed working on the deck. The Usage meter is new (2026-10-26): the data path is verified with real `rate_limits`, but it has not yet been seen on the deck.
-- macOS: written and validated on Linux (build, type-check, manifest validation, and rendering plus session reading against real tmux). **Not yet run in Elgato's app.** Still to verify on the Mac:
-  - The plugin loads, and the actions appear under the "Claude Sessions" category.
+- macOS: installed and running on the Mac (2026-10-27, Stream Deck app 7.6, the app's bundled Node 24). Confirmed:
+  - The plugin loads and connects, and the actions appear under the "Claude Sessions" category and work on the deck.
+  - The hook and status line register, and the hook writes session state on macOS.
+  - The bundled profile imports with the expected layout.
+  - Gotcha: if the app was already running when the plugin was linked, `streamdeck restart` does nothing. Quit and reopen the app once.
+
+  Still to verify on the Mac:
   - Key and strip rendering in the real app, especially the text outline and fonts.
   - The iTerm2 focus check, jumping, and raising iTerm2.
   - Hold-to-approve timing on hardware.
