@@ -20,7 +20,7 @@ from gi.repository import Adw
 from src.backend.DeckManagement.InputIdentifier import Input
 from src.backend.PluginManager.ActionBase import ActionBase
 
-from .logo import SPARK_CREAM, agent_badge, logo
+from .logo import ROBOT_DARK, agent_badge, logo
 from .sessions import CLAUDE, DONE, IDLE, PERMISSION, UNKNOWN, WORKING
 from .usage import humanize_until, meter_image, read_usage
 
@@ -66,9 +66,9 @@ class Logo(NamedTuple):
 LOGO_EMPTY = Logo(size=0.55, valign=0.0, opacity=0.25)
 
 
-def logo_header(on_color: bool) -> Logo:
-    """Small logo at the top; cream on orange/red keys, where orange would vanish."""
-    return Logo(size=0.4, valign=-0.9, tint=SPARK_CREAM if on_color else None)
+def logo_header(on_light: bool) -> Logo:
+    """Small logo at the top; dark on light keys, where steel would vanish."""
+    return Logo(size=0.29, valign=-0.9, tint=ROBOT_DARK if on_light else None)
 
 # Short press jumps; a long press (hold-time, 0.5s by default) approves. Jumping
 # fires on a short release so that a long press doesn't also jump.
@@ -253,10 +253,10 @@ class NextWaiting(AgentAction):
         target = self.store.next_needing_attention()
 
         if not sessions:
-            self.show("", "", "No sessions", EMPTY, logo_style=logo_header(on_color=False))
+            self.show("", "", "No sessions", EMPTY, logo_style=logo_header(on_light=False))
         elif not waiting:
             self.show("", "0", "None waiting", [*READY, 255], center_size=22,
-                      logo_style=logo_header(on_color=False))
+                      logo_style=logo_header(on_light=False))
         else:
             color = state_color(target.get("state"), target.get("agent", CLAUDE))
             self.show(
@@ -265,8 +265,7 @@ class NextWaiting(AgentAction):
                 "→ " + truncate(target.get("project", "?"), 8),
                 color,
                 center_size=22,
-                # Cream on dark keys; the plain orange spark shows on light ones.
-                logo_style=logo_header(on_color=not is_light(color)),
+                logo_style=logo_header(on_light=is_light(color)),
             )
 
     def event_callback(self, event, data=None):
@@ -292,7 +291,7 @@ class SessionDial(AgentAction):
     def refresh(self):
         index, sessions = self.selected()
         if index < 0:
-            self.show("", "", "No sessions", EMPTY, logo_style=logo_header(on_color=False))
+            self.show("", "", "No sessions", EMPTY, logo_style=logo_header(on_light=False))
             return
         self.show_session(sessions[index], top_prefix=f"{index + 1}/{len(sessions)} ")
 

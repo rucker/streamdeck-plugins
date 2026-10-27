@@ -28,8 +28,7 @@ export class NextWaiting extends AgentAction {
 			bottom: "→ " + truncate(target.project ?? "?", 8),
 			color,
 			centerSize: 22,
-			// Cream on dark keys; the plain orange spark shows on light ones.
-			logo: logoHeader(!isLight(color)),
+			logo: logoHeader(isLight(color)),
 		};
 	}
 

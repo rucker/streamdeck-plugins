@@ -1,10 +1,9 @@
 """
-The plugin's spark-style starburst, drawn with Pillow, and the per-agent
-badges on session keys: each agent's logo (assets/<agent>.png, rendered from
-the SVGs by tools/render_agent_logos.py) on a white disc.
+The plugin's mark, a robot head drawn with Pillow, and the per-agent badges on
+session keys: each agent's logo (assets/<agent>.png, rendered from the SVGs by
+tools/render_agent_logos.py) on a white disc.
 """
 
-import math
 import os
 from functools import lru_cache
 
@@ -12,57 +11,47 @@ from PIL import Image, ImageDraw
 
 ASSETS = os.path.join(os.path.dirname(os.path.realpath(__file__)), "assets")
 
-SPARK_ORANGE = (217, 119, 87)
-SPARK_CREAM = (250, 249, 245)
-
-# Ray lengths (fraction of the radius), deliberately uneven so it reads as a
-# hand-drawn spark rather than a mechanical asterisk.
-RAYS = [1.00, 0.78, 0.92, 0.70, 0.96, 0.82, 0.88, 0.72, 0.98, 0.76, 0.90, 0.80]
+ROBOT_STEEL = (196, 204, 216)
+ROBOT_DARK = (24, 24, 24)
 
 CANVAS = 1024  # drawn large and downsampled, since Pillow doesn't anti-alias
 OUTPUT = 256
 
 
-def _draw_spark(color: tuple[int, int, int]) -> Image.Image:
+def _draw_robot(color: tuple[int, int, int]) -> Image.Image:
+    """
+    A robot head with an antenna and ears, in a 100×100 grid scaled to the
+    canvas. The eyes and mouth are holes. Same geometry as render.ts.
+    """
     img = Image.new("RGBA", (CANVAS, CANVAS), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-    center = CANVAS / 2
-    radius = CANVAS * 0.44
-    root_half_width = CANVAS * 0.05
-    tip_half_width = CANVAS * 0.032
-    fill = (*color, 255)
+    k = CANVAS / 100
+    fill, hole = (*color, 255), (0, 0, 0, 0)
 
-    for i, length in enumerate(RAYS):
-        angle = 2 * math.pi * i / len(RAYS) - math.pi / 2
-        tip = radius * length - tip_half_width
-        # Each ray is a blunt, slightly tapered bar with a round cap.
-        dx, dy = math.cos(angle), math.sin(angle)
-        px, py = -dy, dx
-        tx, ty = center + dx * tip, center + dy * tip
-        draw.polygon([
-            (center + px * root_half_width, center + py * root_half_width),
-            (tx + px * tip_half_width, ty + py * tip_half_width),
-            (tx - px * tip_half_width, ty - py * tip_half_width),
-            (center - px * root_half_width, center - py * root_half_width),
-        ], fill=fill)
-        r = tip_half_width
-        draw.ellipse([tx - r, ty - r, tx + r, ty + r], fill=fill)
+    def box(x, y, w, h):
+        return [x * k, y * k, (x + w) * k, (y + h) * k]
 
-    core = CANVAS * 0.1
-    draw.ellipse([center - core, center - core, center + core, center + core], fill=fill)
+    draw.rounded_rectangle(box(14, 24, 72, 60), radius=14 * k, fill=fill)
+    draw.ellipse(box(44, 3, 12, 12), fill=fill)
+    draw.rectangle(box(47, 12, 6, 13), fill=fill)
+    draw.rounded_rectangle(box(5, 44, 10, 22), radius=3 * k, fill=fill)
+    draw.rounded_rectangle(box(85, 44, 10, 22), radius=3 * k, fill=fill)
+    draw.ellipse(box(28, 42, 16, 16), fill=hole)
+    draw.ellipse(box(56, 42, 16, 16), fill=hole)
+    draw.rounded_rectangle(box(33, 66, 34, 8), radius=4 * k, fill=hole)
     return img.resize((OUTPUT, OUTPUT), Image.LANCZOS)
 
 
 @lru_cache(maxsize=None)
 def _base_logo() -> Image.Image:
-    return _draw_spark(SPARK_ORANGE)
+    return _draw_robot(ROBOT_STEEL)
 
 
 @lru_cache(maxsize=None)
 def logo(opacity: float = 1.0, tint: tuple[int, int, int] | None = None) -> Image.Image:
     """
-    The logo as an RGBA image. `tint` recolors it as a solid silhouette (so it
-    stays visible on an orange or red key); `opacity` fades it (empty keys).
+    The logo as an RGBA image. `tint` recolors it as a solid silhouette (dark on
+    light keys); `opacity` fades it (empty keys).
     """
     image = _base_logo().copy()
     alpha = image.getchannel("A")

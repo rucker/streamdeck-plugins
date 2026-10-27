@@ -5,7 +5,7 @@
 	"Description": "Shows which coding agent sessions (Claude Code, GitHub Copilot, Grok) are working, finished, or waiting for approval, and jumps to the session's tmux pane in iTerm2 on press.",
 	"UUID": "com.rucker.agent-sessions",
 	"Category": "Agent Sessions",
-	"CategoryIcon": "imgs/spark-white",
+	"CategoryIcon": "imgs/robot-white",
 	"Icon": "imgs/plugin",
 	"CodePath": "bin/plugin.js",
 	"SDKVersion": 3,
@@ -34,7 +34,7 @@
 		{
 			"Name": "Session Slot",
 			"UUID": "com.rucker.agent-sessions.slot",
-			"Icon": "imgs/spark-white",
+			"Icon": "imgs/robot-white",
 			"Tooltip": "One agent session per key or dial. Press to jump to it; hold to approve a pending permission.",
 			"PropertyInspectorPath": "ui/session-slot.html",
 			"Controllers": ["Keypad", "Encoder"],
@@ -55,7 +55,7 @@
 		{
 			"Name": "Next Waiting Session",
 			"UUID": "com.rucker.agent-sessions.next-waiting",
-			"Icon": "imgs/spark-white",
+			"Icon": "imgs/robot-white",
 			"Tooltip": "How many agent sessions need you. Press to jump to the one that has waited longest.",
 			"Controllers": ["Keypad", "Encoder"],
 			"Encoder": {
@@ -75,7 +75,7 @@
 		{
 			"Name": "Session Picker",
 			"UUID": "com.rucker.agent-sessions.dial",
-			"Icon": "imgs/spark-white",
+			"Icon": "imgs/robot-white",
 			"Tooltip": "Turn to pick an agent session, press or tap to jump, hold to approve.",
 			"Controllers": ["Encoder"],
 			"Encoder": {
@@ -95,7 +95,7 @@
 		{
 			"Name": "Usage Meter",
 			"UUID": "com.rucker.agent-sessions.usage",
-			"Icon": "imgs/spark-white",
+			"Icon": "imgs/robot-white",
 			"Tooltip": "Your plan's 5-hour and weekly usage limits, with the time until each resets.",
 			"Controllers": ["Keypad", "Encoder"],
 			"Encoder": {

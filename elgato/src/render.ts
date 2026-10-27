@@ -9,14 +9,10 @@ import { fileURLToPath } from "node:url";
 
 import { humanizeUntil, usageColor, type UsageWindow } from "./usage";
 
-export const SPARK_ORANGE: RGB = [217, 119, 87];
-export const SPARK_CREAM: RGB = [250, 249, 245];
-
 export type RGB = [number, number, number];
 
-// Ray lengths (fraction of the radius), deliberately uneven so it reads as a
-// hand-drawn spark rather than a mechanical asterisk. Same as logo.py.
-const RAYS = [1.0, 0.78, 0.92, 0.7, 0.96, 0.82, 0.88, 0.72, 0.98, 0.76, 0.9, 0.8];
+const ROBOT_STEEL: RGB = [196, 204, 216];
+const ROBOT_DARK: RGB = [24, 24, 24];
 
 const FONT = "Helvetica Neue, Helvetica, Arial, sans-serif";
 
@@ -31,9 +27,9 @@ export type Logo = {
 /** Faded and centered on keys with nothing to show, so they look intentional. */
 export const LOGO_EMPTY: Logo = { size: 0.55, valign: 0, opacity: 0.25 };
 
-/** Small logo at the top; cream on orange/red keys, where orange would vanish. */
-export function logoHeader(onColor: boolean): Logo {
-	return { size: 0.36, valign: -0.96, tint: onColor ? SPARK_CREAM : undefined };
+/** Small logo at the top; dark on light keys, where steel would vanish. */
+export function logoHeader(onLight: boolean): Logo {
+	return { size: 0.26, valign: -0.96, tint: onLight ? ROBOT_DARK : undefined };
 }
 
 export type Frame = {
@@ -46,27 +42,29 @@ export type Frame = {
 	agent?: string; // session keys: that agent's logo in a corner badge
 };
 
-/** The spark in a 100×100 box: blunt, slightly tapered rays with round caps. */
-function spark(fill: string): string {
-	const c = 50;
-	const radius = 44;
-	const rootHalf = 5;
-	const tipHalf = 3.2;
-	const parts = RAYS.map((length, i) => {
-		const angle = (2 * Math.PI * i) / RAYS.length - Math.PI / 2;
-		const tip = radius * length - tipHalf;
-		const [dx, dy] = [Math.cos(angle), Math.sin(angle)];
-		const [px, py] = [-dy, dx];
-		const [tx, ty] = [c + dx * tip, c + dy * tip];
-		const points = [
-			[c + px * rootHalf, c + py * rootHalf],
-			[tx + px * tipHalf, ty + py * tipHalf],
-			[tx - px * tipHalf, ty - py * tipHalf],
-			[c - px * rootHalf, c - py * rootHalf],
-		].map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" ");
-		return `<polygon points="${points}"/><circle cx="${tx.toFixed(2)}" cy="${ty.toFixed(2)}" r="${tipHalf}"/>`;
-	});
-	return `<g fill="${fill}">${parts.join("")}<circle cx="${c}" cy="${c}" r="10"/></g>`;
+function roundRect(x: number, y: number, w: number, h: number, r: number): string {
+	return `M${x + r},${y}H${x + w - r}A${r},${r} 0 0 1 ${x + w},${y + r}V${y + h - r}A${r},${r} 0 0 1 ${x + w - r},${y + h}` +
+		`H${x + r}A${r},${r} 0 0 1 ${x},${y + h - r}V${y + r}A${r},${r} 0 0 1 ${x + r},${y}Z`;
+}
+
+function circle(cx: number, cy: number, r: number): string {
+	return `M${cx - r},${cy}A${r},${r} 0 1 0 ${cx + r},${cy}A${r},${r} 0 1 0 ${cx - r},${cy}Z`;
+}
+
+/**
+ * The plugin's mark in a 100×100 box: a robot head with an antenna and ears.
+ * The eyes and mouth are holes, so it works at any opacity. Same geometry as logo.py.
+ */
+function robot(fill: string): string {
+	const head = roundRect(14, 24, 72, 60, 14) + circle(36, 50, 8) + circle(64, 50, 8) + roundRect(33, 66, 34, 8, 4);
+	const parts = [
+		`<path d="${head}" fill-rule="evenodd"/>`,
+		`<circle cx="50" cy="9" r="6"/>`,
+		`<rect x="47" y="12" width="6" height="13"/>`,
+		`<rect x="5" y="44" width="10" height="22" rx="3"/>`,
+		`<rect x="85" y="44" width="10" height="22" rx="3"/>`,
+	];
+	return `<g fill="${fill}">${parts.join("")}</g>`;
 }
 
 const AGENT_LOGOS = fileURLToPath(new URL("../imgs/agents/", import.meta.url));
@@ -111,7 +109,7 @@ function placeLogo(logo: Logo, width: number, height: number): string {
 	const x = ((width - size) * ((logo.halign ?? 0) + 1)) / 2;
 	const y = ((height - size) * (logo.valign + 1)) / 2;
 	const opacity = logo.opacity ?? 1;
-	return `<g transform="translate(${x.toFixed(1)},${y.toFixed(1)}) scale(${(size / 100).toFixed(4)})" opacity="${opacity}">${spark(rgb(logo.tint ?? SPARK_ORANGE))}</g>`;
+	return `<g transform="translate(${x.toFixed(1)},${y.toFixed(1)}) scale(${(size / 100).toFixed(4)})" opacity="${opacity}">${robot(rgb(logo.tint ?? ROBOT_STEEL))}</g>`;
 }
 
 /**

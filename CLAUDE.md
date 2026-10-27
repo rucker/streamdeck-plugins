@@ -51,7 +51,7 @@ Behavior is meant to match across platforms. When you change one side, port the 
 |---|---|---|
 | State, tmux order, pruning, approve | `sessions.py` | `src/sessions.ts` |
 | Colors, labels, press/hold, slot numbering | `actions.py` | `src/actions/*.ts` (`base.ts` holds the shared parts) |
-| Logo and agent badges | `logo.py` (Pillow; badges from `assets/*.png`) | `src/render.ts` (SVG, same spark geometry; badges from `imgs/agents/*.svg`) |
+| Logo and agent badges | `logo.py` (Pillow; badges from `assets/*.png`) | `src/render.ts` (SVG, same robot geometry; badges from `imgs/agents/*.svg`) |
 | Usage meter | `usage.py` (read + Pillow drawing), `UsageMeter` in `actions.py` | `src/usage.ts`, `meterSvg` in `src/render.ts`, `src/actions/usage-meter.ts` |
 
 Behaviors that are easy to break:
@@ -61,7 +61,7 @@ Behaviors that are easy to break:
 - **Automatic slots:** slots with slot `0` number themselves in reading order (keys row by row, then dials) and skip sessions claimed by manually numbered slots.
 - **Approve safety:** before sending `1`, approve checks with `tmux capture-pane` that the "❯ 1. Yes … Esc to cancel" dialog is on screen. It only ever sends `1`, never "don't ask again". Each approvable agent has its own pattern in `APPROVE_DIALOGS` (both front ends) and is listed in the hook's `APPROVABLE`. Copilot's dialog sits in a box ("Do you want to …?", then `❯ 1. Yes`, footer "↑/↓ to navigate · enter to select · esc to cancel"), and "1" answers it directly. Its pattern deliberately doesn't match Copilot's folder-trust question. Grok isn't approvable yet.
 - **Colors:** the agent sets the hue and the state its strength (`AGENT_COLORS` in `base.ts` and `actions.py`): "your turn" is the agent's full color, "working" a dimmed one. Ready and No status are near-black, and approve is yellow pulsing to mustard, for every agent. Keys whose background is light (`isLight` / `is_light`, luminance above 0.7: Grok's "your turn" and bright approve) get dark text and a ringed badge, decided from the color itself.
-- **Badges:** session keys show the agent's logo, unaltered, on a white disc (bottom-right). Don't recolor the logos: that's what the brand guidelines forbid. The drawn spark (Next Waiting, empty slots) is ours and can be tinted.
+- **Badges:** session keys show the agent's logo, unaltered, on a white disc (bottom-right). Don't recolor the logos: that's what the brand guidelines forbid. The robot mark (Next Waiting, empty slots, the plugin icons in `imgs/`) is ours and can be tinted: steel grey, dark on light keys. Its geometry is a 100×100 grid shared by `logo.py` and `render.ts`.
 - **Pruning:** a session is dropped only after two consecutive "dead" sightings, 10s apart.
 - **Watched sessions:** a session you're already looking at (its pane is tmux's active pane and the terminal is focused) doesn't count as waiting and doesn't blink. Only `permission` blinks.
 
