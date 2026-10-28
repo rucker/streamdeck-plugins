@@ -116,6 +116,29 @@ def write_atomic(path: str, data: dict) -> None:
     os.replace(tmp, path)
 
 
+def remove_session(session_id: str) -> None:
+    for path in (os.path.join(STATE_DIR, f"{session_id}.json"), os.path.join(STATS_DIR, f"{session_id}.json")):
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
+
+
+def supersede(pane: str, session_id: str) -> None:
+    """A pane runs one agent at a time, so a new session there replaces any
+    older one (resumed or started over without a SessionEnd for the old one)."""
+    for name in os.listdir(STATE_DIR):
+        if not name.endswith(".json") or name == f"{session_id}.json":
+            continue
+        try:
+            with open(os.path.join(STATE_DIR, name)) as f:
+                if json.load(f).get("tmux_pane") != pane:
+                    continue
+        except (OSError, ValueError, AttributeError):
+            continue
+        remove_session(name[:-5])
+
+
 def main() -> None:
     payload = normalize(json.load(sys.stdin))
     session_id = payload.get("session_id")
@@ -126,11 +149,7 @@ def main() -> None:
     path = os.path.join(STATE_DIR, f"{session_id}.json")
 
     if payload.get("hook_event_name") == "SessionEnd":
-        for done in (path, os.path.join(STATS_DIR, f"{session_id}.json")):
-            try:
-                os.remove(done)
-            except FileNotFoundError:
-                pass
+        remove_session(session_id)
         return
 
     try:
@@ -151,6 +170,10 @@ def main() -> None:
     if new_state is None and record:
         return
 
+    pane = os.environ.get("TMUX_PANE")
+    if pane and record.get("tmux_pane") != pane:
+        supersede(pane, session_id)
+
     now = time.time()
     cwd = payload.get("cwd") or record.get("cwd") or ""
     state = new_state or record.get("state") or IDLE
@@ -163,7 +186,7 @@ def main() -> None:
             "cwd": cwd,
             # cwd follows the agent around (cd in a shell); keep the label stable.
             "project": record.get("project") or project_name(cwd),
-            "tmux_pane": os.environ.get("TMUX_PANE") or record.get("tmux_pane"),
+            "tmux_pane": pane or record.get("tmux_pane"),
             "started": record.get("started", now),
             "updated": now,
         }
