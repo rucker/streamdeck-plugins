@@ -96,6 +96,19 @@ def truncate(text: str, length: int) -> str:
     return text if len(text) <= length else text[: length - 1] + "…"
 
 
+def format_credits(credits: float) -> str:
+    """Copilot's AI Credits in at most 5 characters: 2.25, 42.3, 842, 4.2k, 12k."""
+    if credits < 10:
+        return f"{credits:.2f}"
+    if credits < 100:
+        return f"{credits:.1f}"
+    if credits < 1000:
+        return str(round(credits))
+    if credits < 10000:
+        return f"{credits / 1000:.1f}k"
+    return f"{round(credits / 1000)}k"
+
+
 def input_position(ident) -> tuple:
     """Reading order on the deck: keys row by row, then dials left to right."""
     if isinstance(ident, Input.Key):
@@ -178,12 +191,17 @@ class AgentAction(ActionBase):
         # A dial's strip segment is wide enough to show what's being asked.
         if state == PERMISSION and session.get("request") and isinstance(self.input_ident, Input.Dial):
             center, center_size = wrap(session["request"], width=22, lines=2), 11
-        used = session.get("context_used_percentage")
+        # AI Credits (Copilot only) above context use.
+        note = []
+        if session.get("ai_credits") is not None:
+            note.append(format_credits(session["ai_credits"]))
+        if session.get("context_used_percentage") is not None:
+            note.append(f"{round(session['context_used_percentage'])}%")
         self.show(
             top=top_prefix + truncate(session.get("project", "?"), 10),
             center=center,
-            # Context use; centered, since StreamController labels can't be left-aligned.
-            bottom="" if used is None else f"{round(used)}%",
+            # Centered, since StreamController labels can't be left-aligned.
+            bottom="\n".join(note),
             # No pulsing for the session you're already looking at.
             color=state_color(state, session.get("agent", CLAUDE), blink=not self.store.is_watched(session)),
             center_size=center_size,

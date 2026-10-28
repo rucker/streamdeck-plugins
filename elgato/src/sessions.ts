@@ -77,6 +77,7 @@ export type Session = {
 	request?: string;
 	request_kind?: string;
 	context_used_percentage?: number; // from STATS_DIR, when the agent's status line has reported it
+	ai_credits?: number; // from STATS_DIR: Copilot's AI Credits used this session
 };
 
 type Result = { ok: boolean; stdout: string; stderr: string };
@@ -201,6 +202,9 @@ export class SessionStore {
 				const stats = JSON.parse(readFileSync(join(STATS_DIR, `${record.session_id}.json`), "utf8"));
 				if (typeof stats.context_used_percentage === "number") {
 					record.context_used_percentage = stats.context_used_percentage;
+				}
+				if (typeof stats.ai_credits === "number") {
+					record.ai_credits = stats.ai_credits;
 				}
 			} catch {
 				// no stats yet

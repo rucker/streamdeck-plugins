@@ -40,7 +40,7 @@ export type Frame = {
 	centerSize?: number; // in StreamController's key-label points (14 = normal)
 	logo?: Logo;
 	agent?: string; // session keys: that agent's logo in a corner badge
-	note?: string; // bottom-left, level with the badge: the session's context use
+	note?: string; // bottom-left, its last line level with the badge: AI Credits, context use
 };
 
 function roundRect(x: number, y: number, w: number, h: number, r: number): string {
@@ -156,6 +156,8 @@ function svg(width: number, height: number, frame: Frame, scale: number): string
 	const background = frame.color ? rgb(frame.color) : "black";
 	const center = (frame.centerSize ?? 14) * scale;
 	const light = !!frame.color && isLight(frame.color);
+	const noteSize = 10 * scale;
+	const noteLines = frame.note?.split("\n").length ?? 1;
 	const body = [
 		`<rect width="${width}" height="${height}" fill="${background}"/>`,
 		frame.logo ? placeLogo(frame.logo, width, height) : "",
@@ -163,8 +165,8 @@ function svg(width: number, height: number, frame: Frame, scale: number): string
 		label(frame.top, width / 2, height * 0.18, 12 * scale, light),
 		label(frame.center, width / 2, height * 0.52, center, light),
 		label(frame.bottom, width / 2, height * 0.86, 11 * scale, light),
-		// Level with the badge's center (placeBadge: 0.26 tall, inset 0.04).
-		frame.note ? label(frame.note, 0.06 * height, height * 0.83, 10 * scale, light, 1.15, "start") : "",
+		// The last line level with the badge's center (placeBadge: 0.26 tall, inset 0.04); more lines stack above.
+		frame.note ? label(frame.note, 0.06 * height, height * 0.83 - ((noteLines - 1) * noteSize) / 2, noteSize, light, 1, "start") : "",
 	].join("");
 	const doc = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${body}</svg>`;
 	return `data:image/svg+xml;base64,${Buffer.from(doc).toString("base64")}`;

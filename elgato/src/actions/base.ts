@@ -50,6 +50,24 @@ export function truncate(text: string, length: number): string {
 	return text.length <= length ? text : text.slice(0, length - 1) + "…";
 }
 
+/** AI Credits (Copilot only) above context use. */
+function sessionNote(session: Session): string | undefined {
+	const lines = [
+		session.ai_credits === undefined ? "" : formatCredits(session.ai_credits),
+		session.context_used_percentage === undefined ? "" : `${Math.round(session.context_used_percentage)}%`,
+	].filter(Boolean);
+	return lines.length ? lines.join("\n") : undefined;
+}
+
+/** Copilot's AI Credits in at most 5 characters: 2.25, 42.3, 842, 4.2k, 12k. */
+export function formatCredits(credits: number): string {
+	if (credits < 10) return credits.toFixed(2);
+	if (credits < 100) return credits.toFixed(1);
+	if (credits < 1000) return Math.round(credits).toString();
+	if (credits < 10000) return `${(credits / 1000).toFixed(1)}k`;
+	return `${Math.round(credits / 1000)}k`;
+}
+
 /** Greedy word wrap into at most `lines` lines, breaking long words. */
 export function wrap(text: string, width: number, lines: number): string {
 	const out: string[] = [];
@@ -197,7 +215,7 @@ export abstract class AgentAction<T extends JsonObject = JsonObject> extends Sin
 			color: stateColor(state, session.agent, !this.store.isWatched(session)),
 			centerSize,
 			agent: session.agent ?? CLAUDE,
-			note: session.context_used_percentage === undefined ? undefined : `${Math.round(session.context_used_percentage)}%`,
+			note: sessionNote(session),
 		};
 	}
 

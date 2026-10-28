@@ -157,9 +157,10 @@ class SessionStore:
         for record in records:
             try:
                 with open(os.path.join(STATS_DIR, f"{record.get('session_id')}.json")) as f:
-                    used = json.load(f).get("context_used_percentage")
-                if isinstance(used, (int, float)):
-                    record["context_used_percentage"] = used
+                    stats = json.load(f)
+                for field in ("context_used_percentage", "ai_credits"):
+                    if isinstance(stats.get(field), (int, float)):
+                        record[field] = stats[field]
             except (OSError, ValueError, AttributeError):
                 pass  # no stats yet
         return records
