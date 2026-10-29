@@ -5,20 +5,9 @@ Plugins for Rick's Elgato Stream Deck+. The same physical deck moves between a L
 - **Linux:** [StreamController](https://github.com/StreamController/StreamController) (Flatpak `com.core447.StreamController`), with Python plugins in `com_rucker_*/`.
 - **macOS:** Elgato's official Stream Deck app, with a TypeScript plugin in `elgato/`. StreamController can't be used here: on macOS it deliberately skips loading hardware decks.
 
-User-facing docs are in `README.md`. This file covers what you need to work on the code.
+User-facing docs are in `README.md`. This file covers what you need to work on the code; macOS-only specifics are in `elgato/CLAUDE.md`.
 
-## Layout
-
-| Path | What |
-|---|---|
-| `hooks/agent_deck_hook.py` | Agent hook (Claude Code, Copilot, Grok), shared by both platforms. Writes per-session state files. |
-| `hooks/agent_deck_statusline.py` | Status line command for Claude Code, Copilot and Grok, shared by both platforms. Writes each session's context use (and Copilot's AI Credits) to `~/.cache/agent-deck-stats/<session_id>.json`, and Claude's `rate_limits` to `~/.cache/agent-deck-usage.json` for the Usage meter; prints nothing. |
-| `install.sh` | OS-aware installer. Linux: stops StreamController (`flatpak kill`), symlinks every `com_rucker_*` folder that has a `manifest.json`, writes an "Agent Sessions" page (same layout as the macOS profile) unless a page by that name exists, then starts it again with `--daemon-only`, as its autostart entry does. macOS: `npm ci && npm run build` in `elgato/`, then `streamdeck link`. Both: registers the hook in `~/.claude/settings.json` (Claude Code and Grok) and, if Copilot is installed, `~/.copilot/settings.json` (with `--agent copilot`), replacing entries for an older hook path, and sets the status line script as Claude's and Copilot's `statusLine` and Grok's `[ui.status_line]` (in `~/.grok/config.toml`), each unless a different status line is already set. |
-| `com_rucker_AgentSessions/` | Linux Agent Sessions (StreamController plugin). |
-| `com_rucker_PageNav/` | Linux only. Swipe the touch strip to change pages. Elgato's app does this natively. |
-| `com_rucker_ResumeFix/` | Linux only. USB-resets the deck on resume so it doesn't stay dark. |
-| `elgato/` | macOS Agent Sessions (Elgato SDK `@elgato/streamdeck` 3.x, Node, rollup). |
-| `tools/render_agent_logos.py` | Renders the agent logo SVGs (`elgato/…sdPlugin/imgs/agents/`) to PNGs for Linux (`com_rucker_AgentSessions/assets/`). Needs PySide6. Rerun after changing a logo. |
+## History
 
 Agent Sessions was called Claude Sessions until 2026-10-27, and its IDs and files said "claude" (`com.rucker.claude-sessions`, `com_rucker_ClaudeSessions`, `~/.cache/claude-deck/`, `claude_deck_hook.py`, `claude_deck_statusline.py`, `~/.cache/claude-deck-usage.json`). `install.sh` migrates from those names: it rewrites the old plugin IDs in saved deck layouts (after archiving the layout folder, and only while the app is closed), removes the old plugin links, moves the state and usage files, and replaces hook and status line entries that use the old filenames. "Claude" stays only where something really is Claude's: the `claude` agent, its approval dialog, the Usage meter's rate limits, `~/.claude/settings.json`, and this file.
 
@@ -68,25 +57,6 @@ Behaviors that are easy to break:
 - **Pruning:** a session is dropped only after two consecutive "dead" sightings, 10s apart.
 - **One session per pane:** when a session first writes from a tmux pane (new, or resumed there), the hook deletes any other session's files that name the same pane. Resuming or starting over inside a running agent (Copilot's `/resume`, for one) sends no `SessionEnd` for the old session, and since the pane still runs the agent, pruning would never drop it, leaving two keys for one pane.
 - **Watched sessions:** a session you're already looking at (its pane is tmux's active pane and the terminal is focused) doesn't count as waiting and doesn't blink. Only `permission` blinks.
-
-## macOS specifics (`elgato/`)
-
-- **Commands:** `npm run check` (tsc), `npm run build` (rollup → `com.rucker.agent-sessions.sdPlugin/bin/plugin.js`), `npm run watch` (rebuild + `streamdeck restart` on save; needs developer mode), `npx streamdeck validate com.rucker.agent-sessions.sdPlugin`.
-- **Logs:** `com.rucker.agent-sessions.sdPlugin/logs/`.
-- **Terminal:** iTerm2 running plain tmux (same `tmux.conf` as Linux), not `tmux -CC` integration.
-  - Raise it with `open -b com.googlecode.iterm2`.
-  - Check focus with `lsappinfo front` + `lsappinfo info -only bundleid`.
-  - Neither command triggers a macOS permission prompt. Avoid `osascript`, which does.
-- **Environment:** the Stream Deck app starts plugins with a minimal PATH and no locale. `sessions.ts` adds `/opt/homebrew/bin` and `/usr/local/bin` so `tmux` resolves, and sets `LANG=en_US.UTF-8`: without a UTF-8 locale tmux prints the tabs in `-F` formats as `_`, which silently broke tmux ordering and unhooked placeholders. To reproduce the plugin's view, run code under `env -i HOME=$HOME PATH=/usr/bin:/bin`.
-- **Rendering:**
-  - Keys: 144×144 SVG data URLs via `setImage`.
-  - Dials: one full-size pixmap (`layouts/canvas.json`, key `canvas`) set via `setFeedback`.
-  - Text outlines are drawn as a stroked copy under the fill, because `paint-order` support in the app's SVG renderer isn't guaranteed.
-  - Key images are drawn by Qt's SVG Tiny renderer, which ignores `x`/`y` on `<tspan>`, `dominant-baseline` and `rgba()`. Give every line its own `<text>` with an explicit baseline. To preview keys the way the app draws them, render the SVG with PySide6's `QSvgRenderer`.
-- **Press and hold:** the SDK has no hold event. `base.ts` times key/dial down→up (500ms = hold = approve; a short release = jump). Touch taps use the payload's `hold` flag.
-- **Slot setting:** a `<sdpi-select>` in `ui/session-slot.html`, stored as a string. Always parse it with `Number(...)`.
-- **Bundled profile:** `scripts/profile.py` writes `profiles/agent-sessions.streamDeckProfile` (Stream Deck+ only) as part of `npm run build`. The app installs bundled profiles only for packaged plugins, not linked ones, so `install.sh` imports it with `open`, once.
-- **Agent logos:** `render.ts` reads `imgs/agents/<agent>.svg` (located from `import.meta.url`) and inlines its paths, since Qt's renderer can't be trusted with nested `<image>` SVGs. Licensing and sources are in `imgs/agents/NOTICE.md`.
 
 ## Linux specifics
 
