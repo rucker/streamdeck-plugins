@@ -13,7 +13,7 @@ from src.backend.PluginManager.PluginBase import PluginBase
 
 # Relative imports: StreamController imports this as plugins.<folder>.main, and
 # a top-level "actions" module would collide with other plugins' actions/ dirs.
-from .actions import NextWaiting, SessionDial, SessionSlot, UsageMeter
+from .actions import DemoMode, NextWaiting, SessionDial, SessionSlot, UsageMeter
 from .sessions import SessionStore
 
 
@@ -61,6 +61,17 @@ class AgentSessionsPlugin(PluginBase):
             action_id_suffix="UsageMeter",
             action_name="Usage Meter",
             action_support=key_and_dial,
+        ))
+        self.add_action_holder(ActionHolder(
+            plugin_base=self,
+            action_base=DemoMode,
+            action_id_suffix="DemoMode",
+            action_name="Demo Mode",
+            action_support={
+                Input.Key: ActionInputSupport.SUPPORTED,
+                Input.Dial: ActionInputSupport.UNSUPPORTED,
+                Input.Touchscreen: ActionInputSupport.UNSUPPORTED,
+            },
         ))
 
         self.register(

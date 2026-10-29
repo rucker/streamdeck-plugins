@@ -41,6 +41,11 @@ SHELLS = {"bash", "zsh", "fish", "sh", "dash"}
 
 CLAUDE = "claude"
 
+# Started and stopped by hooks/agent_deck_demo.py, at the repo root next to this plugin.
+DEMO_SESSION = "zz-demo"
+DEMO_SCRIPT = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "hooks", "agent_deck_demo.py")
+DEMO_TIMEOUT_SECONDS = 60
+
 # Each agent's tool permission dialog with "1. Yes" highlighted. "1" answers it
 # in both. Copilot's sits in a box, and its folder-trust question ("Do you trust
 # the files…") must not match.
@@ -99,6 +104,9 @@ class SessionStore:
         self.pane_order: dict[str, tuple] = {}
         # pane_id -> (agent, cwd) for every tmux pane running an agent, hooked or not.
         self.agent_panes: dict[str, tuple[str, str]] = {}
+        self.tmux_sessions: set[str] = set()
+        self.demo_starting = False
+        self.demo_stopping = False
         self._stop = threading.Event()
         threading.Thread(target=self._prune_loop, daemon=True, name="AgentSessions-prune").start()
         threading.Thread(target=self._tmux_loop, daemon=True, name="AgentSessions-tmux").start()
@@ -194,7 +202,7 @@ class SessionStore:
     def _tmux_loop(self):
         while not self._stop.wait(TMUX_INTERVAL_SECONDS):
             try:
-                self.pane_order, self.agent_panes = self._read_tmux_panes()
+                self.pane_order, self.agent_panes, self.tmux_sessions = self._read_tmux_panes()
             except Exception:  # noqa: BLE001 - keep the last known layout
                 pass
             try:
@@ -203,26 +211,27 @@ class SessionStore:
                 self.focused_pane = None
 
     @staticmethod
-    def _read_tmux_panes() -> tuple[dict[str, tuple], dict[str, tuple[str, str]]]:
-        """Returns (pane_id -> sort key, pane_id -> (agent, cwd) for panes running an agent)."""
+    def _read_tmux_panes() -> tuple[dict[str, tuple], dict[str, tuple[str, str]], set[str]]:
+        """Returns (pane_id -> sort key, pane_id -> (agent, cwd) for panes running an agent, session names)."""
         result = run_host(["tmux", "list-panes", "-a", "-F", "\t".join([
             "#{pane_id}", "#{session_name}", "#{window_index}", "#{pane_index}",
             "#{pane_current_command}", "#{pane_current_path}",
         ])])
         if result.returncode != 0:
-            return {}, {}
+            return {}, {}, set()
 
         def natural(name: str) -> tuple:
             # Session "10" sorts after "2", like tmux's own ordering.
             return (0, int(name), "") if name.isdigit() else (1, 0, name)
 
-        order, agent_panes = {}, {}
+        order, agent_panes, sessions = {}, {}, set()
         for line in result.stdout.splitlines():
             pane_id, session, window, pane, command, path = line.split("\t", 5)
+            sessions.add(session)
             order[pane_id] = (natural(session), int(window), int(pane))
             if agent := pane_agent(command):
                 agent_panes[pane_id] = (agent, path)
-        return order, agent_panes
+        return order, agent_panes, sessions
 
     def _read_focused_pane(self) -> str | None:
         if not any(w.get("focus") for w in self._terminal_windows()):
@@ -285,10 +294,13 @@ class SessionStore:
     # ------------------------------------------------------------------ #
 
     def jump_to(self, session: dict):
-        threading.Thread(target=self._jump, args=(session,), daemon=True).start()
+        self.jump_to_target(session.get("tmux_pane"))
 
-    def _jump(self, session: dict):
-        pane = session.get("tmux_pane")
+    def jump_to_target(self, pane: str | None):
+        """Any tmux target: a pane, or a whole session ("name:")."""
+        threading.Thread(target=self._jump, args=(pane,), daemon=True).start()
+
+    def _jump(self, pane: str | None):
         if pane:
             # switch-client handles panes in another tmux session; the other two
             # make the pane current within its window/session.
@@ -341,6 +353,32 @@ class SessionStore:
             log.info(f"[AgentSessions] no approval dialog visible in {pane}; not sending")
             return False
         return run_host(["tmux", "send-keys", "-t", pane, "1"]).returncode == 0
+
+    # ------------------------------------------------------------------ #
+    # Demo Mode
+    # ------------------------------------------------------------------ #
+
+    def demo_running(self) -> bool:
+        return DEMO_SESSION in self.tmux_sessions
+
+    def run_demo(self, command: str, on_done=None):
+        """Runs the demo script's start or stop; on_done(ok) runs on the GTK thread."""
+        def work():
+            ok = False
+            try:
+                result = run_host(["python3", "-I", DEMO_SCRIPT, command], timeout=DEMO_TIMEOUT_SECONDS)
+                ok = result.returncode == 0
+                if not ok:
+                    log.warning(f"[AgentSessions] demo {command} failed: {result.stderr.strip()}")
+                # So the key doesn't show the old state until the next tmux poll.
+                self.pane_order, self.agent_panes, self.tmux_sessions = self._read_tmux_panes()
+            except Exception as e:  # noqa: BLE001
+                log.warning(f"[AgentSessions] demo {command} failed: {e}")
+            self.invalidate()
+            if on_done:
+                GLib.idle_add(on_done, ok)
+
+        threading.Thread(target=work, daemon=True).start()
 
     # ------------------------------------------------------------------ #
     # Window Calls GNOME extension (window-calls@domandoman.xyz)

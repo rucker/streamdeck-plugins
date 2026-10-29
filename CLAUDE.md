@@ -44,6 +44,7 @@ Behavior is meant to match across platforms. When you change one side, port the 
 | Colors, labels, press/hold, slot numbering | `actions.py` | `src/actions/*.ts` (`base.ts` holds the shared parts) |
 | Logo and agent badges | `logo.py` (Pillow; badges from `assets/*.png`) | `src/render.ts` (SVG, same robot geometry; badges from `imgs/agents/*.svg`) |
 | Usage meter | `usage.py` (read + Pillow drawing), `UsageMeter` in `actions.py` | `src/usage.ts`, `meterSvg` in `src/render.ts`, `src/actions/usage-meter.ts` |
+| Demo Mode | `DemoMode` in `actions.py`, `run_demo` in `sessions.py` | `src/actions/demo-mode.ts`, `runDemo` in `src/sessions.ts` |
 
 Behaviors that are easy to break:
 
@@ -56,6 +57,7 @@ Behaviors that are easy to break:
 - **Hooks must never block an agent:** the hook always exits 0, and `install.sh` registers it as `python3 -I … || true`. Without `|| true`, a hook that can't start (moved, renamed, `python3` missing) exits 2, which Claude Code, Copilot and Grok all read as "block this action". That happened once: a Copilot session started before the 2026-10-27 rename kept calling the old path and had its tool calls blocked. Running agents keep their hook list until restarted, so after moving the hook, restart them.
 - **Pruning:** a session is dropped only after two consecutive "dead" sightings, 10s apart.
 - **One session per pane:** when a session first writes from a tmux pane (new, or resumed there), the hook deletes any other session's files that name the same pane. Resuming or starting over inside a running agent (Copilot's `/resume`, for one) sends no `SessionEnd` for the old session, and since the pane still runs the agent, pruning would never drop it, leaving two keys for one pane.
+- **Demo Mode:** the work is in `hooks/agent_deck_demo.py` (`start` / `stop`), shared by both front ends; each one only runs it and draws the key. Whether a demo is running comes from tmux (the `zz-demo` session exists), not from the plugin, so a demo outlives plugin restarts and either OS's key can stop it. The script finds agents by typing `command -v` into the first demo pane's shell, then types each agent's command into its pane: the plugins' own PATH is minimal, and tmux's global PATH lacks what shell startup files add (`~/.local/bin`, where `claude` and `grok` live). Verified with Claude Code 2.1.312, Copilot and Grok 1.0.70: in interactive `acceptEdits` mode Claude Code ran even `git init` without asking (`-p` mode does ask), and with no flag it starts in whatever mode you last used (auto mode, here), which asks for nothing. So the script passes `--permission-mode default`, where writing a file always asks. Grok's `--permission-mode acceptEdits` still asked; `--allow Edit --allow Write` doesn't.
 - **Watched sessions:** a session you're already looking at (its pane is tmux's active pane and the terminal is focused) doesn't count as waiting and doesn't blink. Only `permission` blinks.
 
 ## Linux specifics
@@ -78,6 +80,7 @@ Behaviors that are easy to break:
   - Gotcha: `streamdeck restart` (and so `npm run watch`) only works with the app in developer mode. Without it, the app logs the restart link as handled and keeps the old plugin process, and the CLI still prints "Restarted". Rick's Mac has developer mode on (`streamdeck dev`, enabled 2026-10-27). `install.sh` deliberately doesn't turn it on, since it's an app-wide setting; it tells you to relaunch the app instead. To confirm a reload, check that the PID from `pgrep -f agent-sessions.sdPlugin/bin/plugin.js` changed.
 
   Still to verify on the Mac: hold-to-approve timing on hardware.
+- Demo Mode (2026-10-29): `hooks/agent_deck_demo.py` verified end to end on the Mac (all three agents, trust prompts, approvals, stop and cleanup), run the way the plugin runs it. The deck keys on both platforms are untested.
 - Agent Sessions (2026-10-27): the hook was verified end to end with real Copilot and Grok runs on the Mac (states, agent field, cleanup on exit), and the badges were checked with Qt's renderer and Pillow. On the Mac's deck, Copilot sessions show up (with their badge) once they've had a prompt. Fixed after that: unhooked placeholders and tmux ordering (the locale bug above, verified in the plugin's environment), and Copilot approval (verified end to end against a real Copilot dialog through the plugin's approve code). Confirmed on the Mac's deck (2026-10-27): holding to approve Copilot, and "No status" placeholders for idle Copilot and Grok sessions. Still to verify: everything on Linux, where the plugin changes are compiled but untested in StreamController.
 
 ## Conventions

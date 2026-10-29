@@ -107,6 +107,19 @@
 					"ShowTitle": false
 				}
 			]
+		},
+		{
+			"Name": "Demo Mode",
+			"UUID": "com.rucker.agent-sessions.demo",
+			"Icon": "imgs/robot-white",
+			"Tooltip": "Press to start a demo: agent sessions doing small tasks in a new tmux session. Press again to jump to it; hold to stop it.",
+			"Controllers": ["Keypad"],
+			"States": [
+				{
+					"Image": "imgs/key",
+					"ShowTitle": false
+				}
+			]
 		}
 	]
 }

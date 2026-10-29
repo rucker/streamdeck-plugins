@@ -8,12 +8,13 @@
 
 import streamDeck from "@elgato/streamdeck";
 
+import { DemoMode } from "./actions/demo-mode";
 import { NextWaiting } from "./actions/next-waiting";
 import { SessionDial } from "./actions/session-dial";
 import { SessionSlot } from "./actions/session-slot";
 import { UsageMeter } from "./actions/usage-meter";
 
-const actions = [new SessionSlot(), new NextWaiting(), new SessionDial(), new UsageMeter()];
+const actions = [new SessionSlot(), new NextWaiting(), new SessionDial(), new UsageMeter(), new DemoMode()];
 for (const action of actions) {
 	streamDeck.actions.registerAction(action);
 }

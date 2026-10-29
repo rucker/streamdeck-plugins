@@ -9,9 +9,10 @@
  */
 
 import { execFile } from "node:child_process";
-import { readdirSync, readFileSync, unlinkSync } from "node:fs";
+import { readdirSync, readFileSync, realpathSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, join, normalize } from "node:path";
+import { basename, dirname, join, normalize } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import streamDeck from "@elgato/streamdeck";
 
@@ -38,6 +39,11 @@ const UNTRACKED_MAX_AGE_SECONDS = 12 * 3600;
 const SHELLS = new Set(["bash", "zsh", "fish", "sh", "dash"]);
 
 export const CLAUDE = "claude";
+
+// Started and stopped by hooks/agent_deck_demo.py, at the repo root next to this plugin's bin/plugin.js.
+export const DEMO_SESSION = "zz-demo";
+const DEMO_SCRIPT = join(dirname(realpathSync(fileURLToPath(import.meta.url))), "..", "..", "..", "hooks", "agent_deck_demo.py");
+const DEMO_TIMEOUT_MS = 60_000;
 
 /** The agent running in a tmux pane, from #{pane_current_command}. */
 function paneAgent(command: string): string | null {
@@ -119,6 +125,9 @@ export class SessionStore {
 	private paneOrder = new Map<string, PaneOrder>();
 	/** pane_id -> agent and cwd for every tmux pane running an agent, hooked or not. */
 	private agentPanes = new Map<string, { agent: string; path: string }>();
+	private tmuxSessions = new Set<string>();
+	demoStarting = false;
+	demoStopping = false;
 
 	constructor() {
 		this.loop(TMUX_INTERVAL_MS, () => this.trackTmux());
@@ -259,13 +268,16 @@ export class SessionStore {
 		if (!result.ok) {
 			this.paneOrder = new Map();
 			this.agentPanes = new Map();
+			this.tmuxSessions = new Set();
 			return;
 		}
 		const order = new Map<string, PaneOrder>();
 		const agents = new Map<string, { agent: string; path: string }>();
+		const sessions = new Set<string>();
 		for (const line of result.stdout.split("\n")) {
 			const [paneId, session, window, pane, command, ...path] = line.split("\t");
 			if (command === undefined) continue;
+			sessions.add(session);
 			// Session "10" sorts after "2", like tmux's own ordering.
 			const numeric = /^\d+$/.test(session);
 			order.set(paneId, [numeric ? 0 : 1, numeric ? Number(session) : 0, numeric ? "" : session,
@@ -275,6 +287,7 @@ export class SessionStore {
 		}
 		this.paneOrder = order;
 		this.agentPanes = agents;
+		this.tmuxSessions = sessions;
 	}
 
 	private async readFocusedPane(): Promise<string | null> {
@@ -342,7 +355,11 @@ export class SessionStore {
 	// ------------------------------------------------------------------ //
 
 	async jumpTo(session: Session): Promise<void> {
-		const pane = session.tmux_pane;
+		await this.jumpToTarget(session.tmux_pane);
+	}
+
+	/** Any tmux target: a pane, or a whole session ("name:"). */
+	async jumpToTarget(pane: string | null | undefined): Promise<void> {
 		if (pane) {
 			// switch-client handles panes in another tmux session; the other two
 			// make the pane current within its window/session.
@@ -382,6 +399,25 @@ export class SessionStore {
 			return false;
 		}
 		return (await run("tmux", ["send-keys", "-t", pane, "1"])).ok;
+	}
+
+	// ------------------------------------------------------------------ //
+	// Demo Mode
+	// ------------------------------------------------------------------ //
+
+	demoRunning(): boolean {
+		return this.tmuxSessions.has(DEMO_SESSION);
+	}
+
+	async runDemo(command: "start" | "stop"): Promise<boolean> {
+		const result = await run("python3", ["-I", DEMO_SCRIPT, command], DEMO_TIMEOUT_MS);
+		if (!result.ok) {
+			streamDeck.logger.warn(`[AgentSessions] demo ${command} failed: ${result.stderr.trim()}`);
+		}
+		// So the key doesn't show the old state until the next tmux poll.
+		await this.readTmuxPanes();
+		this.invalidate();
+		return result.ok;
 	}
 }
 

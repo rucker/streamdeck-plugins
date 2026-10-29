@@ -6,6 +6,8 @@ Agent Sessions actions:
                 that has waited longest (permission prompts first).
 - SessionDial:  Stream Deck+ dial; turn to pick a session, press/tap to jump.
 - UsageMeter:   your plan's 5-hour and weekly usage, with time until each resets.
+- DemoMode:     press to start a demo of agent sessions in a new tmux session;
+                press again to jump to it, hold to stop it.
 """
 
 import textwrap
@@ -21,7 +23,7 @@ from src.backend.DeckManagement.InputIdentifier import Input
 from src.backend.PluginManager.ActionBase import ActionBase
 
 from .logo import ROBOT_DARK, agent_badge, logo
-from .sessions import CLAUDE, DONE, IDLE, PERMISSION, UNKNOWN, WORKING
+from .sessions import CLAUDE, DEMO_SESSION, DONE, IDLE, PERMISSION, UNKNOWN, WORKING
 from .usage import humanize_until, meter_image, read_usage
 
 # Each agent's own color for "your turn", and a dimmed one for "working".
@@ -33,6 +35,7 @@ AGENT_COLORS = {
 READY = (30, 30, 32)
 APPROVE = (247, 211, 74)
 APPROVE_DIM = (121, 98, 18)
+DEMO_ON = (46, 125, 50)
 EMPTY = [0, 0, 0, 0]
 
 STATE_TEXT = {
@@ -354,3 +357,36 @@ class UsageMeter(AgentAction):
         self.set_background_color(EMPTY, update=False)
         self.set_media(image=meter_image(windows, *self.image_size()), size=1.0, update=False)
         self.get_input().update()
+
+
+class DemoMode(AgentAction):
+    def refresh(self):
+        header = logo_header(on_light=False)
+        if self.store.demo_stopping:
+            self.show("", "Stopping…", "", [*DEMO_ON, 255], logo_style=header)
+        elif self.store.demo_running():
+            self.show("", "Demo on", "Hold to stop", [*DEMO_ON, 255], logo_style=header)
+        elif self.store.demo_starting:
+            self.show("", "Starting…", "", EMPTY, logo_style=header)
+        else:
+            self.show("", "Demo", "Press to start", EMPTY, logo_style=header)
+
+    def event_callback(self, event, data=None):
+        store = self.store
+        if event in PRESS_EVENTS:
+            if store.demo_running():
+                store.jump_to_target(f"{DEMO_SESSION}:")
+            elif not store.demo_starting:
+                store.demo_starting = True
+                store.run_demo("start", on_done=lambda ok: self._finished("demo_starting", ok))
+        elif event in APPROVE_EVENTS and store.demo_running() and not store.demo_stopping:
+            store.demo_stopping = True
+            store.run_demo("stop", on_done=lambda ok: self._finished("demo_stopping", ok))
+        self.refresh()
+
+    def _finished(self, flag: str, ok: bool):
+        setattr(self.store, flag, False)
+        if not ok:
+            self.show_error(duration=1)
+        self.refresh()
+        return False
