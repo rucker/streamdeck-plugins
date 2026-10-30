@@ -4,8 +4,8 @@ Demo Mode for the Agent Sessions deck plugins, shared by both front ends.
 
 `start` opens a tmux session (DEMO_SESSION) with at least three agent sessions,
 using whichever of Claude Code, Copilot and Grok are installed, and gives each
-a small, harmless task in its own folder under DEMO_DIR. Claude Code and
-Copilot stop to ask for approval along the way; Grok doesn't. `stop` kills the tmux session and removes the demo's
+a small, harmless task in its own folder under DEMO_DIR. Each agent stops to
+ask for approval along the way. `stop` kills the tmux session and removes the demo's
 session files and its output.
 
 Exits 0 on success, 1 (with a message on stderr) on failure.
@@ -31,12 +31,14 @@ DETECT_TIMEOUT_SECONDS = 10
 TRUST_TIMEOUT_SECONDS = 30
 
 # Command, and what to add to the task. Claude Code asks once, to write the file;
-# Copilot asks for the file and again for the shell command. Grok may only
-# write files, without asking.
+# Copilot asks for the file and again for the shell command. Grok writes files
+# without asking, then asks for the shell command: its "Yes" is option 2 there,
+# not 3, which shows the deck reading the dialog. It skips read-only commands
+# like ls, hence the redirect.
 AGENTS = {
     "claude": (["claude", "--permission-mode", "default"], ""),
     "copilot": (["copilot", "-i"], " Then run `ls -la` in the shell."),
-    "grok": (["grok", "--allow", "Edit", "--allow", "Write"], ""),
+    "grok": (["grok", "--allow", "Edit", "--allow", "Write"], " Then run `date > done.txt` in the shell."),
 }
 
 # One session per task, so at least three; agents repeat when fewer are
