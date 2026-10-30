@@ -2,7 +2,8 @@
     "name": "agent-sessions-elgato",
     "private": true,
     "scripts": {
-        "build": "rollup -c && python3 -I scripts/profile.py",
+        "build": "rollup -c && python3 -I scripts/profile.py && npm run native",
+        "native": "clang -O2 -Wall -o com.rucker.agent-sessions.sdPlugin/bin/reenumerate native/reenumerate.c -framework IOKit -framework CoreFoundation",
         "check": "tsc --noEmit",
         "watch": "rollup -c -w --watch.onEnd=\"streamdeck restart com.rucker.agent-sessions\""
     },

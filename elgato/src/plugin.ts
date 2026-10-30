@@ -13,6 +13,7 @@ import { NextWaiting } from "./actions/next-waiting";
 import { SessionDial } from "./actions/session-dial";
 import { SessionSlot } from "./actions/session-slot";
 import { UsageMeter } from "./actions/usage-meter";
+import { recoverStuckDecks } from "./recover";
 
 const actions = [new SessionSlot(), new NextWaiting(), new SessionDial(), new UsageMeter(), new DemoMode()];
 for (const action of actions) {
@@ -21,5 +22,7 @@ for (const action of actions) {
 
 // Blinking, state changes and reset countdowns all need a redraw; unchanged frames aren't resent.
 setInterval(() => actions.forEach((a) => a.refreshAll()), 1000);
+
+recoverStuckDecks();
 
 streamDeck.connect();
