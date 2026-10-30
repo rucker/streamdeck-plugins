@@ -59,26 +59,32 @@ function paneAgent(command: string): string | null {
 // Each agent's tool permission dialog with its one-time "Yes" highlighted; the
 // captured digit answers it. Copilot's sits in a box, and its folder-trust
 // question ("Do you trust the files…") must not match. Grok's "Yes" moves (3 for
-// an edit, 2 for a shell command, where 3 is "No"), and its option 1 is
-// always-approve mode, so only a highlighted plain "Yes" or "Yes, proceed" counts.
+// an edit, a fetch or an MCP tool, 2 for a shell command, where 3 is "No"), and
+// its option 1 is always-approve mode, so only a highlighted one-time "Yes",
+// "Yes, proceed" or "Yes, allow once" counts.
 const APPROVE_DIALOGS: Record<string, RegExp> = {
 	claude: /^\s*❯\s*(1)\.\s*Yes\s*$(?=[\s\S]*Esc to cancel)/m,
 	copilot: /Do you want to [^\n]*\?[\s│]*❯ (1)\. Yes[ │]*$(?=[\s\S]*↑\/↓ to navigate · enter to select · esc to cancel)/m,
-	grok: /^\s*┃\s+(\d) \(●\) Yes(?:, proceed)?\s*$(?=[\s\S]*\d\/\d:select\s+│\s+Tab:next option)/m,
+	grok: /^\s*┃\s+(\d) \(●\) Yes(?:, proceed|, allow once)?\s*$(?=[\s\S]*\d\/\d:select\s+│\s+Tab:next option)/m,
 };
 
 /**
- * What Grok's dialog asks, in the hook's style ("$ <command>", "<tool> <file>"):
- * its notification only says "Tool permission requested".
+ * What Grok's dialog asks, in the hook's style ("$ <command>", "Edit <file>",
+ * "Fetch <host>", "<server>: <tool>"): its notification only says "Tool
+ * permission requested".
  */
 function grokRequest(screen: string): string | null {
-	const heading = /^\s*┃\s+›\s+(.+?)\s*$/m.exec(screen);
+	const heading = /^\s*┃\s+›\s+(.+?)\s*$/m.exec(screen)?.[1];
 	if (!heading) return null;
-	const body = screen.slice(heading.index + heading[0].length).split(/^\s*┃\s+\d \(/m)[0];
-	const command = /^\s*┃\s+│ (.+?)\s*$/m.exec(body);
-	if (command) return `$ ${command[1]}`;
-	const edit = /^Allow (\S+) to (.+)\?$/.exec(heading[1]);
-	return edit ? `${edit[1]} ${basename(edit[2])}` : heading[1];
+	const fetch = /^Allow Fetch: (\S+)\?$/.exec(heading);
+	if (fetch) return `Fetch ${URL.canParse(fetch[1]) ? new URL(fetch[1]).host : fetch[1]}`;
+	const mcp = /^Allow \((.+?)\) (.+)\?$/.exec(heading);
+	if (mcp) return `${mcp[1]}: ${mcp[2]}`;
+	const edit = /^Allow (\S+) to (.+)\?$/.exec(heading);
+	if (edit) return `${edit[1]} ${basename(edit[2])}`;
+	// A shell command's heading describes it; the command follows.
+	const command = /^\s*┃\s+│ (.+?)\s*$/m.exec(screen.slice(screen.indexOf(heading)));
+	return command ? `$ ${command[1]}` : heading;
 }
 
 /** The key that answers the agent's approval dialog on this screen, or null if it isn't showing. */

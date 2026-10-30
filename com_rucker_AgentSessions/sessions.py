@@ -13,6 +13,7 @@ import re
 import subprocess
 import threading
 import time
+from urllib.parse import urlparse
 
 from gi.repository import Gio, GLib
 from loguru import logger as log
@@ -51,8 +52,9 @@ DEMO_TIMEOUT_SECONDS = 60
 # Each agent's tool permission dialog with its one-time "Yes" highlighted; the
 # captured digit answers it. Copilot's sits in a box, and its folder-trust
 # question ("Do you trust the files…") must not match. Grok's "Yes" moves (3 for
-# an edit, 2 for a shell command, where 3 is "No"), and its option 1 is
-# always-approve mode, so only a highlighted plain "Yes" or "Yes, proceed" counts.
+# an edit, a fetch or an MCP tool, 2 for a shell command, where 3 is "No"), and
+# its option 1 is always-approve mode, so only a highlighted one-time "Yes",
+# "Yes, proceed" or "Yes, allow once" counts.
 APPROVE_DIALOGS = {
     "claude": re.compile(r"^\s*❯\s*(1)\.\s*Yes\s*$(?=.*Esc to cancel)", re.MULTILINE | re.DOTALL),
     "copilot": re.compile(
@@ -60,7 +62,7 @@ APPROVE_DIALOGS = {
         re.MULTILINE | re.DOTALL,
     ),
     "grok": re.compile(
-        r"^\s*┃\s+(\d) \(●\) Yes(?:, proceed)?\s*$(?=.*\d/\d:select\s+│\s+Tab:next option)",
+        r"^\s*┃\s+(\d) \(●\) Yes(?:, proceed|, allow once)?\s*$(?=.*\d/\d:select\s+│\s+Tab:next option)",
         re.MULTILINE | re.DOTALL,
     ),
 }
@@ -68,18 +70,23 @@ APPROVE_DIALOGS = {
 
 def grok_request(screen: str) -> str | None:
     """
-    What Grok's dialog asks, in the hook's style ("$ <command>", "<tool> <file>"):
-    its notification only says "Tool permission requested".
+    What Grok's dialog asks, in the hook's style ("$ <command>", "Edit <file>",
+    "Fetch <host>", "<server>: <tool>"): its notification only says "Tool
+    permission requested".
     """
     heading = re.search(r"^\s*┃\s+›\s+(.+?)\s*$", screen, re.MULTILINE)
     if not heading:
         return None
-    body = re.split(r"^\s*┃\s+\d \(", screen[heading.end():], maxsplit=1, flags=re.MULTILINE)[0]
-    if command := re.search(r"^\s*┃\s+│ (.+?)\s*$", body, re.MULTILINE):
-        return f"$ {command.group(1)}"
-    if edit := re.fullmatch(r"Allow (\S+) to (.+)\?", heading.group(1)):
+    text = heading.group(1)
+    if fetch := re.fullmatch(r"Allow Fetch: (\S+)\?", text):
+        return "Fetch " + (urlparse(fetch.group(1)).netloc or fetch.group(1))
+    if mcp := re.fullmatch(r"Allow \((.+?)\) (.+)\?", text):
+        return f"{mcp.group(1)}: {mcp.group(2)}"
+    if edit := re.fullmatch(r"Allow (\S+) to (.+)\?", text):
         return f"{edit.group(1)} {os.path.basename(edit.group(2))}"
-    return heading.group(1)
+    # A shell command's heading describes it; the command follows.
+    command = re.search(r"^\s*┃\s+│ (.+?)\s*$", screen[heading.end():], re.MULTILINE)
+    return f"$ {command.group(1)}" if command else text
 
 
 def approve_key(agent: str | None, screen: str) -> str | None:
