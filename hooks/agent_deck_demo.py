@@ -5,8 +5,7 @@ Demo Mode for the Agent Sessions deck plugins, shared by both front ends.
 `start` opens a tmux session (DEMO_SESSION) with at least three agent sessions,
 using whichever of Claude Code, Copilot and Grok are installed, and gives each
 a small, harmless task in its own folder under DEMO_DIR. Claude Code and
-Copilot stop to ask for approval along the way; Grok doesn't, since the deck
-can't approve it yet. `stop` kills the tmux session and removes the demo's
+Copilot stop to ask for approval along the way; Grok doesn't. `stop` kills the tmux session and removes the demo's
 session files and its output.
 
 Exits 0 on success, 1 (with a message on stderr) on failure.

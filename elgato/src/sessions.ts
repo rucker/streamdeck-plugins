@@ -30,6 +30,8 @@ const ATTENTION = [PERMISSION, DONE];
 const TERMINAL_BUNDLE_ID = "com.googlecode.iterm2";
 
 const READ_CACHE_MS = 500;
+// Checks in a row without the approval dialog on screen before a pending permission counts as answered.
+const ANSWERED_AFTER_MISSES = 2;
 const TMUX_INTERVAL_MS = 1000;
 const PRUNE_INTERVAL_MS = 10_000;
 // Sessions outside tmux can't be checked for liveness; drop them once they've
@@ -54,13 +56,35 @@ function paneAgent(command: string): string | null {
 	return command === "copilot" ? command : null;
 }
 
-// Each agent's tool permission dialog with "1. Yes" highlighted. "1" answers it
-// in both. Copilot's sits in a box, and its folder-trust question ("Do you trust
-// the files…") must not match.
+// Each agent's tool permission dialog with its one-time "Yes" highlighted; the
+// captured digit answers it. Copilot's sits in a box, and its folder-trust
+// question ("Do you trust the files…") must not match. Grok's "Yes" moves (3 for
+// an edit, 2 for a shell command, where 3 is "No"), and its option 1 is
+// always-approve mode, so only a highlighted plain "Yes" or "Yes, proceed" counts.
 const APPROVE_DIALOGS: Record<string, RegExp> = {
-	claude: /^\s*❯\s*1\.\s*Yes\s*$(?=[\s\S]*Esc to cancel)/m,
-	copilot: /Do you want to [^\n]*\?[\s│]*❯ 1\. Yes[ │]*$(?=[\s\S]*↑\/↓ to navigate · enter to select · esc to cancel)/m,
+	claude: /^\s*❯\s*(1)\.\s*Yes\s*$(?=[\s\S]*Esc to cancel)/m,
+	copilot: /Do you want to [^\n]*\?[\s│]*❯ (1)\. Yes[ │]*$(?=[\s\S]*↑\/↓ to navigate · enter to select · esc to cancel)/m,
+	grok: /^\s*┃\s+(\d) \(●\) Yes(?:, proceed)?\s*$(?=[\s\S]*\d\/\d:select\s+│\s+Tab:next option)/m,
 };
+
+/**
+ * What Grok's dialog asks, in the hook's style ("$ <command>", "<tool> <file>"):
+ * its notification only says "Tool permission requested".
+ */
+function grokRequest(screen: string): string | null {
+	const heading = /^\s*┃\s+›\s+(.+?)\s*$/m.exec(screen);
+	if (!heading) return null;
+	const body = screen.slice(heading.index + heading[0].length).split(/^\s*┃\s+\d \(/m)[0];
+	const command = /^\s*┃\s+│ (.+?)\s*$/m.exec(body);
+	if (command) return `$ ${command[1]}`;
+	const edit = /^Allow (\S+) to (.+)\?$/.exec(heading[1]);
+	return edit ? `${edit[1]} ${basename(edit[2])}` : heading[1];
+}
+
+/** The key that answers the agent's approval dialog on this screen, or null if it isn't showing. */
+function approveKey(agent: string | undefined, screen: string): string | null {
+	return APPROVE_DIALOGS[agent ?? CLAUDE]?.exec(screen)?.[1] ?? null;
+}
 
 // The Stream Deck app starts plugins with a minimal PATH, which misses Homebrew,
 // and no locale, under which tmux prints the tabs in our -F formats as "_".
@@ -107,6 +131,13 @@ export function projectName(cwd: string | undefined): string {
 /** tmux position of a pane: session (numeric names first, naturally), window, pane. */
 type PaneOrder = [number, number, string, number, number];
 
+/** One pending permission: a session as of a hook update, which a new request or answer changes. */
+function requestKey(session: Session): string {
+	return `${session.session_id}@${session.updated}`;
+}
+
+type DialogCheck = { seen: boolean; misses: number; request?: string };
+
 function compareOrder(a: PaneOrder, b: PaneOrder): number {
 	for (let i = 0; i < a.length; i++) {
 		if (a[i] < b[i]) return -1;
@@ -126,6 +157,8 @@ export class SessionStore {
 	/** pane_id -> agent and cwd for every tmux pane running an agent, hooked or not. */
 	private agentPanes = new Map<string, { agent: string; path: string }>();
 	private tmuxSessions = new Set<string>();
+	/** requestKey -> whether its approval dialog has been on screen, checks since it last was, and what it asks. */
+	private dialogChecks = new Map<string, DialogCheck>();
 	demoStarting = false;
 	demoStopping = false;
 
@@ -161,7 +194,7 @@ export class SessionStore {
 			this.sessionsCache = this.readAll();
 			this.lastRead = Date.now();
 		}
-		const all = [...this.sessionsCache, ...this.unhookedSessions(this.sessionsCache)];
+		const all = [...this.sessionsCache.map((s) => this.withScreen(s)), ...this.unhookedSessions(this.sessionsCache)];
 		return all.sort((a, b) => {
 			const oa = a.tmux_pane ? this.paneOrder.get(a.tmux_pane) : undefined;
 			const ob = b.tmux_pane ? this.paneOrder.get(b.tmux_pane) : undefined;
@@ -188,6 +221,22 @@ export class SessionStore {
 				state: UNKNOWN,
 				started: 0,
 			}));
+	}
+
+	/**
+	 * No hook fires when a permission is granted, only when the tool finishes,
+	 * which for a long command can be minutes. Once its dialog has left the
+	 * screen, show the session as working until the hook catches up. Until then,
+	 * the dialog may say more about the request than the hook could.
+	 */
+	private withScreen(session: Session): Session {
+		const check = session.state === PERMISSION ? this.dialogChecks.get(requestKey(session)) : undefined;
+		if (!check) return session;
+		if (check.misses < ANSWERED_AFTER_MISSES) {
+			return check.request ? { ...session, request: check.request } : session;
+		}
+		const { request: _request, request_kind: _kind, ...rest } = session;
+		return { ...rest, state: WORKING };
 	}
 
 	private readAll(): Session[] {
@@ -252,6 +301,7 @@ export class SessionStore {
 
 	private async trackTmux(): Promise<void> {
 		await this.readTmuxPanes();
+		await this.checkDialogs();
 		try {
 			this.focusedPane = await this.readFocusedPane();
 		} catch {
@@ -288,6 +338,29 @@ export class SessionStore {
 		this.paneOrder = order;
 		this.agentPanes = agents;
 		this.tmuxSessions = sessions;
+	}
+
+	private async checkDialogs(): Promise<void> {
+		const checks = new Map<string, DialogCheck>();
+		for (const session of this.sessionsCache) {
+			if (session.state !== PERMISSION || !session.tmux_pane || !APPROVE_DIALOGS[session.agent ?? CLAUDE]) continue;
+			const key = requestKey(session);
+			const check = this.dialogChecks.get(key) ?? { seen: false, misses: 0 };
+			const screen = await run("tmux", ["capture-pane", "-p", "-t", session.tmux_pane]);
+			if (screen.ok && approveKey(session.agent, screen.stdout)) {
+				check.seen = true;
+				check.misses = 0;
+			} else if (screen.ok && check.seen) {
+				// Only a dialog seen on screen can disappear: one the pattern never
+				// matches must not hide a pending request.
+				check.misses++;
+			}
+			if (screen.ok && session.agent === "grok") {
+				check.request = grokRequest(screen.stdout) ?? check.request;
+			}
+			checks.set(key, check);
+		}
+		this.dialogChecks = checks;
 	}
 
 	private async readFocusedPane(): Promise<string | null> {
@@ -386,19 +459,19 @@ export class SessionStore {
 		return !!session && session.state === PERMISSION && session.request_kind === "tool" && !!session.tmux_pane;
 	}
 
-	/** Answers "1. Yes" (never "don't ask again"). */
+	/** Answers "Yes" once (never "don't ask again" or always-approve). */
 	async approve(session: Session): Promise<boolean> {
 		if (!SessionStore.canApprove(session)) return false;
 		const pane = session.tmux_pane!;
 		// Check the dialog is really on screen: it may have been answered in the
-		// terminal already, and a stray "1" would land in the prompt instead.
+		// terminal already, and a stray digit would land in the prompt instead.
 		const screen = await run("tmux", ["capture-pane", "-p", "-t", pane]);
-		const dialog = APPROVE_DIALOGS[session.agent ?? CLAUDE];
-		if (!screen.ok || !dialog?.test(screen.stdout)) {
+		const key = screen.ok ? approveKey(session.agent, screen.stdout) : null;
+		if (!key) {
 			streamDeck.logger.info(`[AgentSessions] no approval dialog visible in ${pane}; not sending`);
 			return false;
 		}
-		return (await run("tmux", ["send-keys", "-t", pane, "1"])).ok;
+		return (await run("tmux", ["send-keys", "-t", pane, key])).ok;
 	}
 
 	// ------------------------------------------------------------------ //

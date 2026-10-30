@@ -31,8 +31,11 @@ DONE = "done"  # the agent finished its turn; your move
 PERMISSION = "permission"  # blocked on an approval / question
 
 CLAUDE = "claude"
+GROK = "grok"
 # Agents whose approval dialog the deck recognizes (see APPROVE_DIALOGS in the front ends).
-APPROVABLE = (CLAUDE, "copilot")
+APPROVABLE = (CLAUDE, "copilot", GROK)
+# Grok has no PermissionRequest: a tool approval comes only as a Notification with this message.
+GROK_TOOL_PERMISSION = "Tool permission requested"
 
 # Events that only update a session the hook already knows about. Grok sends a
 # Stop after SessionEnd, which would otherwise bring the session back.
@@ -44,7 +47,7 @@ def agent_name() -> str:
         return sys.argv[sys.argv.index("--agent") + 1]
     # Grok runs the same registration as Claude Code, from Claude's settings.
     if os.environ.get("GROK_HOOK_EVENT"):
-        return "grok"
+        return GROK
     return CLAUDE
 
 
@@ -206,8 +209,9 @@ def main() -> None:
         record["request_kind"] = "tool" if agent in APPROVABLE else "other"
     elif "request" not in record:
         # Notification-only fallback (e.g. a question rather than a tool call).
-        record["request"] = str(payload.get("message", ""))[:120]
-        record["request_kind"] = "other"
+        message = str(payload.get("message", ""))
+        record["request"] = message[:120]
+        record["request_kind"] = "tool" if agent == GROK and message == GROK_TOOL_PERMISSION else "other"
 
     write_atomic(path, record)
 

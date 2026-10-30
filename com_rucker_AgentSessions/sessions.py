@@ -31,6 +31,8 @@ ATTENTION = (PERMISSION, DONE)
 TERMINAL_WM_CLASS = "org.gnome.Terminal"
 
 READ_CACHE_SECONDS = 0.5
+# Checks in a row without the approval dialog on screen before a pending permission counts as answered.
+ANSWERED_AFTER_MISSES = 2
 TMUX_INTERVAL_SECONDS = 1
 PRUNE_INTERVAL_SECONDS = 10
 # Sessions outside tmux can't be checked for liveness; drop them once they've
@@ -46,16 +48,50 @@ DEMO_SESSION = "zz-demo"
 DEMO_SCRIPT = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "hooks", "agent_deck_demo.py")
 DEMO_TIMEOUT_SECONDS = 60
 
-# Each agent's tool permission dialog with "1. Yes" highlighted. "1" answers it
-# in both. Copilot's sits in a box, and its folder-trust question ("Do you trust
-# the files…") must not match.
+# Each agent's tool permission dialog with its one-time "Yes" highlighted; the
+# captured digit answers it. Copilot's sits in a box, and its folder-trust
+# question ("Do you trust the files…") must not match. Grok's "Yes" moves (3 for
+# an edit, 2 for a shell command, where 3 is "No"), and its option 1 is
+# always-approve mode, so only a highlighted plain "Yes" or "Yes, proceed" counts.
 APPROVE_DIALOGS = {
-    "claude": re.compile(r"^\s*❯\s*1\.\s*Yes\s*$(?=.*Esc to cancel)", re.MULTILINE | re.DOTALL),
+    "claude": re.compile(r"^\s*❯\s*(1)\.\s*Yes\s*$(?=.*Esc to cancel)", re.MULTILINE | re.DOTALL),
     "copilot": re.compile(
-        r"Do you want to [^\n]*\?[\s│]*❯ 1\. Yes[ │]*$(?=.*↑/↓ to navigate · enter to select · esc to cancel)",
+        r"Do you want to [^\n]*\?[\s│]*❯ (1)\. Yes[ │]*$(?=.*↑/↓ to navigate · enter to select · esc to cancel)",
+        re.MULTILINE | re.DOTALL,
+    ),
+    "grok": re.compile(
+        r"^\s*┃\s+(\d) \(●\) Yes(?:, proceed)?\s*$(?=.*\d/\d:select\s+│\s+Tab:next option)",
         re.MULTILINE | re.DOTALL,
     ),
 }
+
+
+def grok_request(screen: str) -> str | None:
+    """
+    What Grok's dialog asks, in the hook's style ("$ <command>", "<tool> <file>"):
+    its notification only says "Tool permission requested".
+    """
+    heading = re.search(r"^\s*┃\s+›\s+(.+?)\s*$", screen, re.MULTILINE)
+    if not heading:
+        return None
+    body = re.split(r"^\s*┃\s+\d \(", screen[heading.end():], maxsplit=1, flags=re.MULTILINE)[0]
+    if command := re.search(r"^\s*┃\s+│ (.+?)\s*$", body, re.MULTILINE):
+        return f"$ {command.group(1)}"
+    if edit := re.fullmatch(r"Allow (\S+) to (.+)\?", heading.group(1)):
+        return f"{edit.group(1)} {os.path.basename(edit.group(2))}"
+    return heading.group(1)
+
+
+def approve_key(agent: str | None, screen: str) -> str | None:
+    """The key that answers the agent's approval dialog on this screen, or None if it isn't showing."""
+    dialog = APPROVE_DIALOGS.get(agent or CLAUDE)
+    match = dialog.search(screen) if dialog else None
+    return match.group(1) if match else None
+
+
+def request_key(session: dict) -> tuple:
+    """One pending permission: a session as of a hook update, which a new request or answer changes."""
+    return session.get("session_id"), session.get("updated")
 
 
 def is_in_flatpak() -> bool:
@@ -105,6 +141,8 @@ class SessionStore:
         # pane_id -> (agent, cwd) for every tmux pane running an agent, hooked or not.
         self.agent_panes: dict[str, tuple[str, str]] = {}
         self.tmux_sessions: set[str] = set()
+        # request_key -> [seen: its approval dialog has been on screen, checks since it last was, what it asks]
+        self._dialog_checks: dict[tuple, list] = {}
         self.demo_starting = False
         self.demo_stopping = False
         self._stop = threading.Event()
@@ -130,7 +168,7 @@ class SessionStore:
                 self._last_read = time.time()
             order = self.pane_order
             return sorted(
-                self._sessions + self._unhooked_sessions(self._sessions),
+                [self._with_screen(s) for s in self._sessions] + self._unhooked_sessions(self._sessions),
                 key=lambda s: (0, order[s["tmux_pane"]]) if s.get("tmux_pane") in order
                 else (1, (s.get("started", 0), s.get("session_id", ""))),
             )
@@ -147,6 +185,22 @@ class SessionStore:
              "project": project_name(path), "state": UNKNOWN, "started": 0}
             for pane, (agent, path) in self.agent_panes.items() if pane not in known
         ]
+
+    def _with_screen(self, session: dict) -> dict:
+        """
+        No hook fires when a permission is granted, only when the tool finishes,
+        which for a long command can be minutes. Once its dialog has left the
+        screen, show the session as working until the hook catches up. Until then,
+        the dialog may say more about the request than the hook could.
+        """
+        check = self._dialog_checks.get(request_key(session)) if session.get("state") == PERMISSION else None
+        if not check:
+            return session
+        if check[1] < ANSWERED_AFTER_MISSES:
+            return {**session, "request": check[2]} if check[2] else session
+        answered = {k: v for k, v in session.items() if k not in ("request", "request_kind")}
+        answered["state"] = WORKING
+        return answered
 
     def _read_all(self) -> list[dict]:
         records = []
@@ -206,6 +260,10 @@ class SessionStore:
             except Exception:  # noqa: BLE001 - keep the last known layout
                 pass
             try:
+                self._check_dialogs()
+            except Exception:  # noqa: BLE001 - keep the last results
+                pass
+            try:
                 self.focused_pane = self._read_focused_pane()
             except Exception:  # noqa: BLE001 - treat as "not looking at anything"
                 self.focused_pane = None
@@ -232,6 +290,27 @@ class SessionStore:
             if agent := pane_agent(command):
                 agent_panes[pane_id] = (agent, path)
         return order, agent_panes, sessions
+
+    def _check_dialogs(self):
+        with self._lock:
+            pending = [s for s in self._sessions if s.get("state") == PERMISSION and s.get("tmux_pane")]
+        checks = {}
+        for session in pending:
+            if session.get("agent", CLAUDE) not in APPROVE_DIALOGS:
+                continue
+            key = request_key(session)
+            check = list(self._dialog_checks.get(key, [False, 0, None]))
+            screen = run_host(["tmux", "capture-pane", "-p", "-t", session["tmux_pane"]])
+            if screen.returncode == 0 and approve_key(session.get("agent"), screen.stdout):
+                check[:2] = [True, 0]
+            elif screen.returncode == 0 and check[0]:
+                # Only a dialog seen on screen can disappear: one the pattern never
+                # matches must not hide a pending request.
+                check[1] += 1
+            if screen.returncode == 0 and session.get("agent") == "grok":
+                check[2] = grok_request(screen.stdout) or check[2]
+            checks[key] = check
+        self._dialog_checks = checks
 
     def _read_focused_pane(self) -> str | None:
         if not any(w.get("focus") for w in self._terminal_windows()):
@@ -329,7 +408,7 @@ class SessionStore:
         )
 
     def approve(self, session: dict, on_done=None):
-        """Answers "1. Yes" (never "don't ask again"); on_done(ok) runs on the GTK thread."""
+        """Answers "Yes" once (never "don't ask again" or always-approve); on_done(ok) runs on the GTK thread."""
         def work():
             ok = False
             try:
@@ -346,13 +425,13 @@ class SessionStore:
             return False
         pane = session["tmux_pane"]
         # Check the dialog is really on screen: it may have been answered in the
-        # terminal already, and a stray "1" would land in the prompt instead.
+        # terminal already, and a stray digit would land in the prompt instead.
         screen = run_host(["tmux", "capture-pane", "-p", "-t", pane])
-        dialog = APPROVE_DIALOGS.get(session.get("agent", CLAUDE))
-        if screen.returncode != 0 or not dialog or not dialog.search(screen.stdout):
+        key = approve_key(session.get("agent"), screen.stdout) if screen.returncode == 0 else None
+        if not key:
             log.info(f"[AgentSessions] no approval dialog visible in {pane}; not sending")
             return False
-        return run_host(["tmux", "send-keys", "-t", pane, "1"]).returncode == 0
+        return run_host(["tmux", "send-keys", "-t", pane, key]).returncode == 0
 
     # ------------------------------------------------------------------ #
     # Demo Mode
