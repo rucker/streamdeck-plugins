@@ -58,7 +58,11 @@ def logo(opacity: float = 1.0, tint: tuple[int, int, int] | None = None) -> Imag
     if tint is not None:
         image = Image.new("RGBA", image.size, (*tint, 255))
     if opacity < 1.0:
-        alpha = alpha.point(lambda a: int(a * opacity))
+        # Darkened rather than made see-through: StreamController pastes a key's
+        # image using its own alpha as the mask, which applies the alpha twice on
+        # a transparent key (0.25 comes out at 0.07, invisible). On the black of
+        # an empty key this looks the same as render.ts's SVG opacity.
+        image = Image.blend(Image.new("RGBA", image.size, (0, 0, 0, 255)), image, opacity)
     image.putalpha(alpha)
     return image
 
