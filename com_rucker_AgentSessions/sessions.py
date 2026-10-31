@@ -30,6 +30,8 @@ UNKNOWN = "unknown"  # an agent seen in tmux, but no hook has reported yet
 ATTENTION = (PERMISSION, DONE)
 
 TERMINAL_WM_CLASS = "org.gnome.Terminal"
+# Games run under gamescope; while it's up, you aren't looking at a terminal.
+GAME_PROCESS = "gamescope(-wl)?"
 
 READ_CACHE_SECONDS = 0.5
 # Checks in a row without the approval dialog on screen before a pending permission counts as answered.
@@ -320,6 +322,13 @@ class SessionStore:
         self._dialog_checks = checks
 
     def _read_focused_pane(self) -> str | None:
+        # Focus only matters for a session waiting on you, and asking GNOME Shell
+        # for its window list every second breaks mouse capture in games. So only
+        # ask while something is waiting, and never while a game is running.
+        if not any(s.get("state") in ATTENTION and s.get("tmux_pane") for s in self.sessions()):
+            return None
+        if run_host(["pgrep", "-x", GAME_PROCESS]).returncode == 0:
+            return None
         if not any(w.get("focus") for w in self._terminal_windows()):
             return None
         # Run outside tmux, display-message reports the most recently used client.
