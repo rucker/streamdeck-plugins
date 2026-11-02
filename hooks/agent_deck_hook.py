@@ -31,9 +31,10 @@ DONE = "done"  # the agent finished its turn; your move
 PERMISSION = "permission"  # blocked on an approval / question
 
 CLAUDE = "claude"
+COPILOT = "copilot"
 GROK = "grok"
 # Agents whose approval dialog the deck recognizes (see APPROVE_DIALOGS in the front ends).
-APPROVABLE = (CLAUDE, "copilot", GROK)
+APPROVABLE = (CLAUDE, COPILOT, GROK)
 # Grok has no PermissionRequest: a tool approval comes only as a Notification with this message.
 GROK_TOOL_PERMISSION = "Tool permission requested"
 
@@ -61,7 +62,7 @@ def normalize(payload: dict) -> dict:
     return payload
 
 
-def state_for(payload: dict) -> str | None:
+def state_for(payload: dict, agent: str) -> str | None:
     event = payload.get("hook_event_name")
 
     if event == "SessionStart":
@@ -71,7 +72,9 @@ def state_for(payload: dict) -> str | None:
     if event == "Stop":
         return DONE
     if event == "PermissionRequest":
-        return PERMISSION
+        # Copilot fires it for every tool call, before deciding whether to ask
+        # (autopilot, allowed commands); only its permission_prompt means a dialog.
+        return None if agent == COPILOT else PERMISSION
     if event == "Notification":
         kind = payload.get("notification_type")
         message = str(payload.get("message", "")).lower()
@@ -102,6 +105,18 @@ def summarize_request(tool: str, tool_input: dict) -> str:
         _, server, name = (tool.split("__", 2) + ["", ""])[:3]
         return f"{server}: {name}"
     return tool
+
+
+def copilot_request(message: str) -> str:
+    """Copilot's permission_prompt message, e.g. "Run command: <command>"."""
+    kind, _, detail = message.partition(": ")
+    if kind == "Run command":
+        return summarize_request("bash", {"command": detail})
+    if kind == "Edit file":
+        return summarize_request("Edit", {"file_path": detail.strip()})
+    if kind == "Fetch URL":
+        return summarize_request("WebFetch", {"url": detail.strip()})
+    return message
 
 
 def project_name(cwd: str) -> str:
@@ -161,7 +176,8 @@ def main() -> None:
     except (OSError, ValueError):
         record = {}
 
-    new_state = state_for(payload)
+    agent = record.get("agent") or agent_name()
+    new_state = state_for(payload, agent)
     # An idle_prompt can arrive after a permission prompt was already shown;
     # don't let it downgrade the more urgent state.
     if new_state == DONE and record.get("state") == PERMISSION and payload.get(
@@ -180,7 +196,6 @@ def main() -> None:
     now = time.time()
     cwd = payload.get("cwd") or record.get("cwd") or ""
     state = new_state or record.get("state") or IDLE
-    agent = record.get("agent") or agent_name()
 
     record.update(
         {
@@ -207,6 +222,9 @@ def main() -> None:
         # Only tool approvals may be approved from the deck, and only for agents
         # whose dialog the deck can recognize before answering it.
         record["request_kind"] = "tool" if agent in APPROVABLE else "other"
+    elif agent == COPILOT and payload.get("notification_type") == "permission_prompt":
+        record["request"] = copilot_request(str(payload.get("message", "")))[:120]
+        record["request_kind"] = "tool"
     elif "request" not in record:
         # Notification-only fallback (e.g. a question rather than a tool call).
         message = str(payload.get("message", ""))

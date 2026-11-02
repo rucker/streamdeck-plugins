@@ -22,13 +22,13 @@ The hook writes `~/.cache/agent-deck/<session_id>.json` atomically, and both fro
 - `started`, `updated`, `since`: epoch seconds. `since` is when `state` last changed.
 - `state`: `idle`, `working`, `done` or `permission`.
 - `request`: one-line summary of a pending permission.
-- `request_kind`: `tool` (a `PermissionRequest` from Claude Code or Copilot; approvable from the deck) or `other` (a Notification fallback, or an agent whose dialog the deck can't recognize; never approvable).
+- `request_kind`: `tool` (a tool approval: Claude Code's `PermissionRequest`, Copilot's or Grok's `permission_prompt` notification; approvable from the deck) or `other` (a Notification fallback, or an agent whose dialog the deck can't recognize; never approvable).
 
 How each agent feeds the hook (verified with Copilot CLI 1.0.104 and Grok 1.0.70):
 
 - **Claude Code:** the reference format.
 - **Grok:** reads hooks from `~/.claude/settings.json` and sends Claude's snake_case keys. The hook tells it apart by `$GROK_HOOK_EVENT`. It has no `PermissionRequest`: a pending tool approval comes as `Notification` / `permission_prompt` with the message "Tool permission requested", which the hook records as `request_kind: tool` (any other Grok notification is `other`). It and it sends one more `Stop` after `SessionEnd`, so `Stop` and `Notification` never create a session.
-- **Copilot:** hooks registered under Claude's event names get Claude-style payloads, except `PermissionRequest`, which is camelCase (`sessionId`, `toolName`, `toolInput`) with no `hook_event_name`. `normalize()` in the hook maps it. Interactive Copilot fires `SessionStart` only with the first prompt, not at launch, so until then a new session is just an unhooked placeholder.
+- **Copilot:** hooks registered under Claude's event names get Claude-style payloads, except `PermissionRequest`, which is camelCase (`sessionId`, `toolName`, `toolInput`) with no `hook_event_name`. `normalize()` in the hook maps it. `PermissionRequest` also isn't a dialog: Copilot fires it for every tool call, before deciding whether to ask (in autopilot, 170 of them came with 6 real prompts), and the payload is the same either way. So the hook ignores it for Copilot and takes the `Notification` / `permission_prompt` that comes only with a real dialog (every one did, in 2026-10-28…11-02 logs), turning its message ("Run command: …", "Edit file: …", "Fetch URL: …") into the request text (`copilot_request`). Verified with Copilot 1.0.105, live in autopilot (Allow All) and with a normal prompt. Interactive Copilot fires `SessionStart` only with the first prompt, not at launch, so until then a new session is just an unhooked placeholder.
 
 The Usage meter reads `~/.cache/agent-deck-usage.json`: `updated` plus optional `five_hour` and `seven_day`, each `{used_percentage, resets_at}` (epoch seconds), copied from the status line payload's `rate_limits`. A missing window, or one whose `resets_at` has passed, counts as 0%. The file deliberately lives outside `~/.cache/agent-deck/`, because every `.json` file in that directory is read as a session.
 
